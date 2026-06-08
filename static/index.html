@@ -741,10 +741,10 @@
               <option value="axis">Axis</option>
             </select>
           </div>
-          <button class="btn btn-primary" id="btn-cred-start">
+          <button class="btn btn-primary" id="btn-cred-start" onclick="credentialStart()">
             <i class="ti ti-certificate"></i> 啟動分析
           </button>
-          <button class="btn btn-danger" id="btn-cred-stop" disabled>
+          <button class="btn btn-danger" id="btn-cred-stop" disabled onclick="credentialStop()">
             <i class="ti ti-square"></i> 停止
           </button>
         </div>
@@ -763,10 +763,10 @@
             <label>韌體檔案</label>
             <input type="file" id="fw-file" accept=".bin,.img,.gz,.zip,.tar" />
           </div>
-          <button class="btn btn-primary" id="btn-fw-start">
+          <button class="btn btn-primary" id="btn-fw-start" onclick="firmwareStart()">
             <i class="ti ti-cpu"></i> 上傳並分析
           </button>
-          <button class="btn btn-danger" id="btn-fw-stop" disabled>
+          <button class="btn btn-danger" id="btn-fw-stop" disabled onclick="firmwareStop()">
             <i class="ti ti-square"></i> 停止
           </button>
         </div>
@@ -775,10 +775,10 @@
       <div class="ctrl-card">
         <h3>分析進度</h3>
         <div id="fw-phases" style="display:flex; flex-direction:column; gap:10px; font-size:12px; font-family:var(--font-mono)">
-          <div id="fw-phase-1" style="color:var(--color-text-muted)">Phase 1 — Binwalk 解包</div>
-          <div id="fw-phase-2" style="color:var(--color-text-muted)">Phase 2 — Firmwalker 敏感掃描</div>
-          <div id="fw-phase-3" style="color:var(--color-text-muted)">Phase 3 — checksec ELF 分析</div>
-          <div id="fw-phase-4" style="color:var(--color-text-muted)">Phase 4 — 彙整報告</div>
+          <div id="fw-phase-1" style="color:var(--color-text-muted)">Phase 1 — Binwalk 解包 <span class="fw-pct"></span></div>
+          <div id="fw-phase-2" style="color:var(--color-text-muted)">Phase 2 — Firmwalker 敏感掃描 <span class="fw-pct"></span></div>
+          <div id="fw-phase-3" style="color:var(--color-text-muted)">Phase 3 — checksec ELF 分析 <span class="fw-pct"></span></div>
+          <div id="fw-phase-4" style="color:var(--color-text-muted)">Phase 4 — 彙整報告 <span class="fw-pct"></span></div>
         </div>
       </div>
       <div class="log-console" id="log-firmware">
@@ -962,6 +962,8 @@ const MODULE_META = {
 // ── Global state ──────────────────────────────────────────────────────────────
 let currentSession   = null;
 let scannerWS        = null;
+let credentialWS     = null;
+let firmwareWS       = null;
 let _scanResults     = [];
 let _currentScanMeta = null;
 let _scanProgress    = 0;
@@ -1372,6 +1374,192 @@ function _buildReportHtml(entry) {
     + cveSection
     + scriptSection
     + "</div>\n</body>\n</html>";
+}
+
+// ── Credential UI ─────────────────────────────────────────────────────────────
+function credentialStart() {
+  if (!currentSession) {
+    alert("請先建立或選擇測試會話（點擊右上角 SESSION）");
+    return;
+  }
+  const raw = document.getElementById("cred-target").value.trim();
+  if (!raw) { alert("請輸入目標 Host:Port"); return; }
+
+  // Parse host:port (default port 443)
+  const lastColon = raw.lastIndexOf(":");
+  let host, port;
+  if (lastColon > 0 && lastColon < raw.length - 1 && !isNaN(raw.slice(lastColon + 1))) {
+    host = raw.slice(0, lastColon);
+    port = parseInt(raw.slice(lastColon + 1));
+  } else {
+    host = raw;
+    port = 443;
+  }
+
+  const brand = document.getElementById("cred-brand").value;
+
+  logLine("credential", "info", `[start] 目標: ${host}:${port}${brand ? "  品牌: " + brand : ""}`);
+  setDot("credential", "running");
+  document.getElementById("btn-cred-start").disabled = true;
+  document.getElementById("btn-cred-stop").disabled  = false;
+
+  credentialWS = new WSClient("credential", currentSession.id, {
+    log:    (d) => logLine("credential", d.level, d.msg),
+    result: (d) => {
+      const cls = { critical:"err", high:"err", medium:"warn", low:"warn", info:"info" }[d.severity] || "info";
+      logLine("credential", cls, `[${d.severity?.toUpperCase()}] ${d.title}`);
+    },
+    alert:  (d) => logLine("credential", "err", `[ALERT ${d.severity?.toUpperCase()}] ${d.title}: ${d.detail}`),
+    done:   (d) => {
+      logLine("credential", "ok", `[done] 完成，共 ${d.total_findings ?? 0} 個發現`);
+      setDot("credential", "idle");
+      document.getElementById("btn-cred-start").disabled = false;
+      document.getElementById("btn-cred-stop").disabled  = true;
+    },
+    error:  (d) => logLine("credential", "err", `[error] ${d.msg}`),
+  });
+  credentialWS.connect();
+
+  fetch("/api/credential/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      session_id:     currentSession.id,
+      host, port, brand,
+      check_tls:      true,
+      check_password: true,
+      password_ports: [22, 80, port, 23, 1883],
+    }),
+  }).catch(e => logLine("credential", "err", String(e)));
+}
+
+function credentialStop() {
+  if (!currentSession) return;
+  fetch("/api/credential/stop", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: currentSession.id }),
+  }).then(() => {
+    setDot("credential", "idle");
+    document.getElementById("btn-cred-start").disabled = false;
+    document.getElementById("btn-cred-stop").disabled  = true;
+  });
+}
+
+// ── Firmware UI ───────────────────────────────────────────────────────────────
+
+function _fwPhaseUpdate(phase, pct) {
+  // phase 1-4, pct 0-100
+  const phases = ["fw-phase-1","fw-phase-2","fw-phase-3","fw-phase-4"];
+  phases.forEach((id, idx) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const phaseNum = idx + 1;
+    if (phaseNum < phase) {
+      el.style.color = "var(--color-text-success)";
+      el.querySelector(".fw-pct") && (el.querySelector(".fw-pct").textContent = "✓");
+    } else if (phaseNum === phase) {
+      el.style.color = "var(--color-accent-info)";
+      const pctEl = el.querySelector(".fw-pct");
+      if (pctEl) pctEl.textContent = pct + "%";
+    } else {
+      el.style.color = "var(--color-text-muted)";
+    }
+  });
+}
+
+async function firmwareStart() {
+  if (!currentSession) {
+    alert("請先建立或選擇測試會話（點擊右上角 SESSION）");
+    return;
+  }
+  const fileInput = document.getElementById("fw-file");
+  if (!fileInput.files.length) { alert("請選擇韌體檔案"); return; }
+  const file = fileInput.files[0];
+
+  // Reset phase colours
+  ["fw-phase-1","fw-phase-2","fw-phase-3","fw-phase-4"].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.style.color = "var(--color-text-muted)";
+  });
+
+  document.getElementById("btn-fw-start").disabled = true;
+  document.getElementById("btn-fw-stop").disabled  = false;
+  setDot("firmware", "running");
+  logLine("firmware", "info", `[upload] ${file.name} (${(file.size/1024).toFixed(1)} KB)`);
+
+  // Connect WS before upload so we catch all messages
+  firmwareWS = new WSClient("firmware", currentSession.id, {
+    log:      (d) => logLine("firmware", d.level, d.msg),
+    result:   (d) => {
+      const cls = { critical:"err", high:"err", medium:"warn", low:"warn" }[d.severity] || "info";
+      logLine("firmware", cls, `[${d.severity?.toUpperCase()}] ${d.title}: ${d.detail || ""}`);
+    },
+    alert:    (d) => logLine("firmware", "err", `[ALERT ${d.severity?.toUpperCase()}] ${d.title}: ${d.detail}`),
+    progress: (d) => {
+      logLine("firmware", "info", `[Phase ${d.phase}] ${d.phase_name} — ${d.pct}%`);
+      _fwPhaseUpdate(d.phase, d.pct);
+    },
+    done:     (d) => {
+      logLine("firmware", "ok", `[done] 韌體分析完成，共 ${d.total_findings ?? 0} 個發現`);
+      _fwPhaseUpdate(5, 100); // mark all done
+      setDot("firmware", "idle");
+      document.getElementById("btn-fw-start").disabled = false;
+      document.getElementById("btn-fw-stop").disabled  = true;
+    },
+    error:    (d) => logLine("firmware", "err", `[error] ${d.msg}`),
+  });
+  firmwareWS.connect();
+
+  // Upload file
+  const fd = new FormData();
+  fd.append("file", file);
+  let uploadOk = false;
+  try {
+    const upRes = await fetch(
+      `/api/firmware/upload?session_id=${currentSession.id}`,
+      { method: "POST", body: fd }
+    );
+    if (!upRes.ok) {
+      const err = await upRes.json().catch(() => ({ detail: upRes.statusText }));
+      logLine("firmware", "err", `[upload error] ${err.detail || upRes.statusText}`);
+    } else {
+      const upData = await upRes.json();
+      logLine("firmware", "ok", `[uploaded] ${upData.filename} (${(upData.size/1024).toFixed(1)} KB)`);
+      uploadOk = true;
+    }
+  } catch(e) {
+    logLine("firmware", "err", `[upload error] ${e}`);
+  }
+
+  if (!uploadOk) {
+    setDot("firmware", "idle");
+    document.getElementById("btn-fw-start").disabled = false;
+    document.getElementById("btn-fw-stop").disabled  = true;
+    return;
+  }
+
+  // Start analysis
+  fetch("/api/firmware/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: currentSession.id }),
+  }).then(r => r.json()).then(d => {
+    logLine("firmware", "info", `[started] ${JSON.stringify(d)}`);
+  }).catch(e => logLine("firmware", "err", String(e)));
+}
+
+function firmwareStop() {
+  if (!currentSession) return;
+  fetch("/api/firmware/stop", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: currentSession.id }),
+  }).then(() => {
+    setDot("firmware", "idle");
+    document.getElementById("btn-fw-start").disabled = false;
+    document.getElementById("btn-fw-stop").disabled  = true;
+  });
 }
 
 // ── Log console helpers ───────────────────────────────────────────────────────

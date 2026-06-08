@@ -7,6 +7,8 @@ from fastapi.responses import FileResponse
 
 from database import init_db
 from routers import scanner as scanner_router
+from routers import credential as credential_router
+from routers import firmware as firmware_router
 
 
 @asynccontextmanager
@@ -31,6 +33,8 @@ app.add_middleware(
 
 # ── REST API routes ───────────────────────────────────────────────────────────
 app.include_router(scanner_router.router, prefix="/api")
+app.include_router(credential_router.router, prefix="/api")
+app.include_router(firmware_router.router, prefix="/api")
 
 # ── WebSocket routes ──────────────────────────────────────────────────────────
 @app.websocket("/ws/scanner/{session_id}")
@@ -42,6 +46,32 @@ async def ws_scanner(websocket: WebSocket, session_id: int):
             await websocket.receive_text()
     except WebSocketDisconnect:
         conns = scanner_router._ws_connections.get(session_id, [])
+        if websocket in conns:
+            conns.remove(websocket)
+
+
+@app.websocket("/ws/credential/{session_id}")
+async def ws_credential(websocket: WebSocket, session_id: int):
+    await websocket.accept()
+    credential_router._ws_connections.setdefault(session_id, []).append(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        conns = credential_router._ws_connections.get(session_id, [])
+        if websocket in conns:
+            conns.remove(websocket)
+
+
+@app.websocket("/ws/firmware/{session_id}")
+async def ws_firmware(websocket: WebSocket, session_id: int):
+    await websocket.accept()
+    firmware_router._ws_connections.setdefault(session_id, []).append(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        conns = firmware_router._ws_connections.get(session_id, [])
         if websocket in conns:
             conns.remove(websocket)
 
