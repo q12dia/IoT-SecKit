@@ -747,6 +747,15 @@
           <button class="btn btn-danger" id="btn-cred-stop" disabled onclick="credentialStop()">
             <i class="ti ti-square"></i> 停止
           </button>
+          <button class="btn btn-ghost" id="btn-cred-report" disabled onclick="showCredReport()">
+            <i class="ti ti-file-report"></i> 憑證報告
+          </button>
+          <div class="form-group">
+            <label>歷史記錄</label>
+            <select id="cred-history-select" onchange="openCredHistoryReport(this.value)">
+              <option value="">— 選擇過往分析 —</option>
+            </select>
+          </div>
         </div>
       </div>
       <div class="log-console" id="log-credential">
@@ -1377,6 +1386,11 @@ function _buildReportHtml(entry) {
 }
 
 // ── Credential UI ─────────────────────────────────────────────────────────────
+let _credResults   = [];
+let _credAlerts    = [];
+let _credMeta      = null;
+let _credDoneCount = 0;
+
 function credentialStart() {
   if (!currentSession) {
     alert("請先建立或選擇測試會話（點擊右上角 SESSION）");
@@ -1385,7 +1399,6 @@ function credentialStart() {
   const raw = document.getElementById("cred-target").value.trim();
   if (!raw) { alert("請輸入目標 Host:Port"); return; }
 
-  // Parse host:port (default port 443)
   const lastColon = raw.lastIndexOf(":");
   let host, port;
   if (lastColon > 0 && lastColon < raw.length - 1 && !isNaN(raw.slice(lastColon + 1))) {
@@ -1395,10 +1408,21 @@ function credentialStart() {
     host = raw;
     port = 443;
   }
-
   const brand = document.getElementById("cred-brand").value;
 
-  logLine("credential", "info", `[start] 目標: ${host}:${port}${brand ? "  品牌: " + brand : ""}`);
+  _credResults   = [];
+  _credAlerts    = [];
+  _credDoneCount = 0;
+  _credMeta = {
+    target: host + ":" + port,
+    host, port, brand,
+    brandLabel: brand || "自動偵測",
+    startedAt: new Date().toLocaleString("zh-TW"),
+    sess: currentSession,
+  };
+  document.getElementById("btn-cred-report").disabled = true;
+
+  logLine("credential", "info", "[start] 目標: " + host + ":" + port + (brand ? "  品牌: " + brand : ""));
   setDot("credential", "running");
   document.getElementById("btn-cred-start").disabled = true;
   document.getElementById("btn-cred-stop").disabled  = false;
@@ -1406,17 +1430,37 @@ function credentialStart() {
   credentialWS = new WSClient("credential", currentSession.id, {
     log:    (d) => logLine("credential", d.level, d.msg),
     result: (d) => {
+      _credResults.push(d);
       const cls = { critical:"err", high:"err", medium:"warn", low:"warn", info:"info" }[d.severity] || "info";
-      logLine("credential", cls, `[${d.severity?.toUpperCase()}] ${d.title}`);
+      logLine("credential", cls, "[" + (d.severity||"info").toUpperCase() + "] " + d.title);
     },
-    alert:  (d) => logLine("credential", "err", `[ALERT ${d.severity?.toUpperCase()}] ${d.title}: ${d.detail}`),
+    alert:  (d) => {
+      _credAlerts.push(d);
+      logLine("credential", "err", "[ALERT " + (d.severity||"").toUpperCase() + "] " + d.title + ": " + d.detail);
+    },
     done:   (d) => {
-      logLine("credential", "ok", `[done] 完成，共 ${d.total_findings ?? 0} 個發現`);
-      setDot("credential", "idle");
-      document.getElementById("btn-cred-start").disabled = false;
-      document.getElementById("btn-cred-stop").disabled  = true;
+      _credDoneCount++;
+      logLine("credential", "ok", "[done " + _credDoneCount + "/2] 共 " + (d.total_findings ?? 0) + " 個發現");
+      const _entry = {
+        id: _credMeta ? (_credMeta._entryId || (_credMeta._entryId = Date.now())) : Date.now(),
+        label: (_credMeta?.sess?.name||"—") + " · " + (_credMeta?.target||"—") + " · " + new Date().toLocaleString("zh-TW"),
+        ..._credMeta,
+        doneAt:  new Date().toLocaleString("zh-TW"),
+        results: [..._credResults],
+        alerts:  [..._credAlerts],
+      };
+      _saveCredHistory(_entry);
+      _loadCredHistory();
+      document.getElementById("btn-cred-report").disabled = false;
+      if (_credDoneCount >= 2) {
+        const conc = _credConclusion(_credResults, _credAlerts);
+        logLine("credential", conc.level === "ok" ? "ok" : "warn", "[結論] " + conc.text);
+        setDot("credential", "idle");
+        document.getElementById("btn-cred-start").disabled = false;
+        document.getElementById("btn-cred-stop").disabled  = true;
+      }
     },
-    error:  (d) => logLine("credential", "err", `[error] ${d.msg}`),
+    error:  (d) => logLine("credential", "err", "[error] " + d.msg),
   });
   credentialWS.connect();
 
@@ -1444,6 +1488,185 @@ function credentialStop() {
     document.getElementById("btn-cred-start").disabled = false;
     document.getElementById("btn-cred-stop").disabled  = true;
   });
+}
+
+function showCredReport() {
+  if (!_credMeta) return;
+  _openCredReportTab({
+    ..._credMeta,
+    doneAt:  new Date().toLocaleString("zh-TW"),
+    results: [..._credResults],
+    alerts:  [..._credAlerts],
+  });
+}
+
+function openCredHistoryReport(id) {
+  if (!id) return;
+  const arr = JSON.parse(localStorage.getItem("iot_cred_history") || "[]");
+  const entry = arr.find(h => String(h.id) === String(id));
+  if (entry) _openCredReportTab(entry);
+  document.getElementById("cred-history-select").value = "";
+}
+
+function _openCredReportTab(entry) {
+  const html = _buildCredReportHtml(entry);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url  = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function _saveCredHistory(entry) {
+  const KEY = "iot_cred_history";
+  let arr = JSON.parse(localStorage.getItem(KEY) || "[]");
+  const idx = arr.findIndex(h => h.id === entry.id);
+  if (idx >= 0) arr[idx] = entry;
+  else arr.unshift(entry);
+  if (arr.length > 20) arr = arr.slice(0, 20);
+  try { localStorage.setItem(KEY, JSON.stringify(arr)); } catch(e) { console.warn("[cred-history] save failed", e); }
+}
+
+function _loadCredHistory() {
+  const sel = document.getElementById("cred-history-select");
+  if (!sel) return;
+  const arr = JSON.parse(localStorage.getItem("iot_cred_history") || "[]");
+  sel.innerHTML = "<option value=\"\">— 歷史記錄 (" + arr.length + ") —</option>"
+    + arr.map(h => "<option value=\"" + h.id + "\">" + escHtml(h.label) + "</option>").join("");
+}
+
+function _credConclusion(results, alerts) {
+  const critTLS = results.filter(r => r.severity === "critical").length;
+  const highTLS = results.filter(r => r.severity === "high").length;
+  if (alerts.length > 0)
+    return { level: "err",
+      text: "發現 " + alerts.length + " 個服務使用預設密碼，攻擊者可直接登入設備。建議立即更改所有預設帳號密碼。" };
+  if (critTLS > 0)
+    return { level: "err",
+      text: "TLS 設定存在 " + critTLS + " 個重大弱點（如 Heartbleed），設備通訊存在被竊聽或遠端攻擊風險，建議盡快更新韌體或修補設定。" };
+  if (highTLS > 0)
+    return { level: "warn",
+      text: "TLS 設定存在 " + highTLS + " 個高風險弱點，建議升級至 TLS 1.2+ 並停用 RC4 等弱加密套件。" };
+  if (results.length > 0)
+    return { level: "warn",
+      text: "TLS 設定存在 " + results.length + " 個中低風險項目，無立即性威脅，建議定期檢視憑證有效期與加密套件設定。" };
+  return { level: "ok", text: "未發現 TLS 弱點或預設密碼，憑證安全狀況良好。" };
+}
+
+function _buildCredReportHtml(entry) {
+  const results   = entry.results || [];
+  const alerts    = entry.alerts  || [];
+  const sess      = entry.sess;
+  const target    = entry.target    || "";
+  const brand     = entry.brandLabel || entry.brand || "—";
+  const startedAt = entry.startedAt || "—";
+  const doneAt    = entry.doneAt    || "—";
+
+  function e(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  const conc = _credConclusion(results, alerts);
+  const cColor = { ok:"#3fb950", warn:"#e3b341", err:"#ff7b72" }[conc.level] || "#b1bac4";
+  const cBg    = { ok:"rgba(35,134,54,.15)", warn:"rgba(210,153,34,.15)", err:"rgba(218,54,51,.15)" }[conc.level];
+
+  const crit = results.filter(r=>r.severity==="critical").length;
+  const high = results.filter(r=>r.severity==="high").length;
+  const med  = results.filter(r=>r.severity==="medium").length;
+  const low  = results.filter(r=>r.severity==="low").length;
+
+  const statsHtml = "<div class=\"stats\">"
+    + "<div class=\"stat\"><div class=\"num" + (crit ? " danger":"") + "\">" + crit + "</div><div class=\"lbl\">重大 Critical</div></div>"
+    + "<div class=\"stat\"><div class=\"num" + (high ? " danger":"") + "\">" + high + "</div><div class=\"lbl\">高危 High</div></div>"
+    + "<div class=\"stat\"><div class=\"num" + (med  ? " warn"  :"") + "\">" + med  + "</div><div class=\"lbl\">中等 Medium</div></div>"
+    + "<div class=\"stat\"><div class=\"num\">" + low  + "</div><div class=\"lbl\">低危 Low</div></div>"
+    + "<div class=\"stat\"><div class=\"num" + (alerts.length ? " danger":"") + "\">" + alerts.length + "</div><div class=\"lbl\">預設密碼命中</div></div>"
+    + "</div>";
+
+  const conclusionHtml = "<div style=\"background:" + cBg + ";border:.5px solid " + cColor + ";"
+    + "border-radius:8px;padding:14px 18px;margin-bottom:24px;display:flex;gap:10px;align-items:flex-start\">"
+    + "<span style=\"font-size:20px;flex-shrink:0\">" + (conc.level === "ok" ? "✓" : "⚠") + "</span>"
+    + "<div><div style=\"font-weight:600;color:" + cColor + ";margin-bottom:4px\">結論</div>"
+    + "<div style=\"font-size:13px;color:#b1bac4\">" + e(conc.text) + "</div></div></div>";
+
+  let tlsSection = "";
+  if (results.length > 0) {
+    const rows = results.map(r => {
+      const s = r.severity || "info";
+      const cls = { critical:"critical", high:"high", medium:"medium", low:"low" }[s] || "";
+      return "<tr>"
+        + "<td>" + (cls ? "<span class=\"badge " + cls + "\">" + s.toUpperCase() + "</span>" : s) + "</td>"
+        + "<td class=\"primary\">" + e(r.title||"") + "</td>"
+        + "<td>" + (r.cvss != null ? r.cvss : "—") + "</td>"
+        + "<td>" + (r.cve_id ? "<span class=\"badge medium\">" + e(r.cve_id) + "</span>" : "—") + "</td>"
+        + "<td class=\"muted\">" + e((r.detail||"").substring(0,100)) + "</td>"
+        + "</tr>";
+    }).join("");
+    tlsSection = "<h2><i class=\"ti ti-shield\" style=\"vertical-align:middle;margin-right:6px\"></i>TLS / SSL 發現</h2>"
+      + "<table><thead><tr><th>等級</th><th>項目</th><th>CVSS</th><th>CVE</th><th>說明</th></tr></thead>"
+      + "<tbody>" + rows + "</tbody></table>";
+  }
+
+  let pwdSection = "";
+  if (alerts.length > 0) {
+    const rows = alerts.map(a =>
+      "<tr><td><span class=\"badge critical\">CRITICAL</span></td>"
+      + "<td class=\"primary\">" + e(a.title||"") + "</td>"
+      + "<td class=\"muted\">" + e(a.detail||"") + "</td></tr>"
+    ).join("");
+    pwdSection = "<h2><i class=\"ti ti-key\" style=\"vertical-align:middle;margin-right:6px\"></i>預設密碼命中</h2>"
+      + "<table><thead><tr><th>等級</th><th>服務</th><th>帳密</th></tr></thead>"
+      + "<tbody>" + rows + "</tbody></table>";
+  }
+
+  const noFindings = results.length === 0 && alerts.length === 0
+    ? "<div style=\"text-align:center;padding:48px;color:#6e7681;font-family:monospace;font-size:13px\">✓ 未發現任何憑證弱點</div>" : "";
+
+  const css = "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}"
+    + "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh}"
+    + "#toolbar{display:flex;align-items:center;gap:12px;padding:10px 24px;background:#161b22;border-bottom:.5px solid rgba(255,255,255,.08);position:sticky;top:0;z-index:10}"
+    + "#tb-title{font-size:15px;font-weight:600;color:#388bfd}.spacer{flex:1}"
+    + ".tbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:transparent;border:.5px solid rgba(255,255,255,.15);color:#b1bac4;transition:background .1s}"
+    + ".tbtn:hover{background:#21262d}"
+    + "#content{max-width:1100px;margin:0 auto;padding:32px 40px}"
+    + ".meta-hdr{border-bottom:.5px solid rgba(255,255,255,.15);padding-bottom:20px;margin-bottom:24px}"
+    + ".meta-hdr h2{font-size:20px;font-weight:700;margin-bottom:10px;color:#388bfd}"
+    + ".meta-row{display:flex;flex-wrap:wrap;gap:20px;font-family:monospace;font-size:12px;color:#b1bac4}"
+    + ".meta-row b{color:#e6edf3}"
+    + ".stats{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}"
+    + ".stat{background:#161b22;border:.5px solid rgba(255,255,255,.08);border-radius:8px;padding:14px 20px;flex:1;min-width:120px}"
+    + ".num{font-size:28px;font-weight:700;font-family:monospace;color:#388bfd}"
+    + ".num.danger{color:#ff7b72}.num.warn{color:#e3b341}"
+    + ".lbl{font-size:11px;color:#6e7681;margin-top:2px;text-transform:uppercase;letter-spacing:.06em}"
+    + "h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#b1bac4;margin:28px 0 12px;padding-bottom:6px;border-bottom:.5px solid rgba(255,255,255,.08)}"
+    + "table{width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;background:#161b22;border:.5px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden;margin-bottom:8px}"
+    + "th{padding:8px 12px;text-align:left;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#6e7681;background:#21262d;border-bottom:.5px solid rgba(255,255,255,.08)}"
+    + "td{padding:7px 12px;border-bottom:.5px solid rgba(255,255,255,.06);color:#b1bac4;vertical-align:top}"
+    + "tr:last-child td{border-bottom:none}tr:hover td{background:#21262d}"
+    + ".primary{color:#e6edf3}.muted{color:#6e7681}"
+    + ".badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;font-family:monospace;text-transform:uppercase}"
+    + ".badge.critical{background:rgba(218,54,51,.15);color:#ff7b72}"
+    + ".badge.high{background:#3b2b00;color:#e3b341}"
+    + ".badge.medium{background:rgba(210,153,34,.15);color:#e3b341}"
+    + ".badge.low{background:rgba(35,134,54,.15);color:#3fb950}"
+    + "@media print{#toolbar{display:none}#content{padding:16px}}";
+
+  return "<!DOCTYPE html>\n<html lang=\"zh-TW\">\n<head>\n"
+    + "<meta charset=\"UTF-8\">\n<title>IoT SecKit — 憑證分析 " + e(target) + "</title>\n"
+    + "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/tabler-icons.min.css\"/>\n"
+    + "<style>" + css + "</style>\n</head>\n<body>\n"
+    + "<div id=\"toolbar\"><i class=\"ti ti-certificate\" style=\"font-size:18px;color:#388bfd\"></i>"
+    + "<span id=\"tb-title\">IoT SecKit — 憑證分析報告</span><span class=\"spacer\"></span>"
+    + "<button class=\"tbtn\" onclick=\"window.print()\"><i class=\"ti ti-printer\"></i> 列印 / 存 PDF</button>"
+    + "<button class=\"tbtn\" onclick=\"window.close()\"><i class=\"ti ti-x\"></i> 關閉</button></div>\n"
+    + "<div id=\"content\">"
+    + "<div class=\"meta-hdr\"><h2><i class=\"ti ti-certificate\" style=\"vertical-align:middle;margin-right:8px\"></i>憑證分析報告</h2>"
+    + "<div class=\"meta-row\">"
+    + "<span><b>會話</b>: " + e(sess && sess.name ? sess.name : "—") + "</span>"
+    + "<span><b>目標</b>: " + e(target) + "</span>"
+    + "<span><b>設備廠牌</b>: " + e(brand) + "</span>"
+    + "<span><b>開始時間</b>: " + e(startedAt) + "</span>"
+    + "<span><b>完成時間</b>: " + e(doneAt) + "</span>"
+    + "</div></div>"
+    + statsHtml + conclusionHtml + tlsSection + pwdSection + noFindings
+    + "</div>\n</body>\n</html>";
 }
 
 // ── Firmware UI ───────────────────────────────────────────────────────────────
@@ -1589,6 +1812,7 @@ function setDot(module, state) {
 const _initModule = location.hash.replace("#", "") || "scanner";
 switchModule(_initModule);
 _loadScanHistory();
+_loadCredHistory();
 </script>
 </body>
 </html>

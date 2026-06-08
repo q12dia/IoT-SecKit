@@ -81,7 +81,7 @@ class FirmwareRunner(BaseRunner):
             await self._log("warn", f"[Phase 1] binwalk 未找到於 {binwalk}，嘗試 PATH")
             binwalk = "binwalk"
 
-        cmd = f"{binwalk} --extract --matryoshka --directory {out_dir} {fw_path}"
+        cmd = f"{binwalk} --run-as=root --extract --matryoshka --directory {out_dir} {fw_path}"
         arch, fs_type = "unknown", "unknown"
 
         try:
