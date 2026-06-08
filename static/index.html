@@ -271,10 +271,15 @@
     .panel {
       display: none;
       height: 100%;
-      overflow-y: auto;
+      overflow: hidden;
       padding: 20px;
     }
-    .panel.active { display: flex; flex-direction: column; gap: 16px; }
+    .panel.active {
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      overflow: hidden;
+    }
 
     /* ── Panel common components ───────────────────────────────────────────── */
 
@@ -360,7 +365,7 @@
       line-height: 1.65;
       padding: 10px 12px;
       overflow-y: auto;
-      height: 280px;
+      height: 160px;
       flex-shrink: 0;
     }
     .log-line { white-space: pre-wrap; word-break: break-all; }
@@ -375,7 +380,9 @@
       background: var(--color-bg-surface);
       border: 0.5px solid var(--color-border-tertiary);
       border-radius: var(--border-radius-lg);
-      overflow: hidden;
+      overflow-y: auto;
+      flex: 1;
+      min-height: 0;
     }
     .results-table table {
       width: 100%;
@@ -392,6 +399,9 @@
       color: var(--color-text-muted);
       border-bottom: 0.5px solid var(--color-border-tertiary);
       background: var(--color-bg-elevated);
+      position: sticky;
+      top: 0;
+      z-index: 1;
     }
     .results-table tbody td {
       padding: 8px 12px;
