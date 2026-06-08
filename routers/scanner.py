@@ -25,8 +25,9 @@ _ws_connections: dict[int, list[WebSocket]] = {}
 class ScanStartRequest(BaseModel):
     session_id: int
     target: str
-    depth: str = "standard"      # quick | standard | deep
-    ports: str | None = None     # defaults to IOT_DEFAULT_PORTS
+    depth: str = "standard"         # quick | standard | deep | all_tcp | all_udp
+    ports: str | None = None        # defaults to IOT_DEFAULT_PORTS
+    extra_flags: str | None = None  # arbitrary nmap flags appended to the command
 
 
 class ScanStopRequest(BaseModel):
@@ -67,6 +68,7 @@ async def start_scan(req: ScanStartRequest, db: Session = Depends(get_db)):
             target=req.target,
             depth=req.depth,
             ports=req.ports or IOT_DEFAULT_PORTS,
+            extra_flags=req.extra_flags,
         )
     )
     return {"status": "started", "session_id": req.session_id}

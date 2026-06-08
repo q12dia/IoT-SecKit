@@ -52,6 +52,7 @@ class NmapRunner(BaseRunner):
         depth: str = "standard",
         ports: str = IOT_DEFAULT_PORTS,
         extra_scripts: list[str] | None = None,
+        extra_flags: str | None = None,
     ):
         self.running = True
         flags   = DEPTH_FLAGS.get(depth, DEPTH_FLAGS["standard"])
@@ -61,9 +62,14 @@ class NmapRunner(BaseRunner):
         )
         xml_out = f"/tmp/nmap_{self.session_id}.xml"
 
+        # Don't add -p when flags already contain a port range (e.g. all_tcp/all_udp)
+        port_arg = "" if "-p" in flags else f"-p {ports}"
+
+        user_flags = extra_flags.strip() if extra_flags else ""
         cmd = (
-            f"nmap {flags} -p {ports} "
+            f"nmap {flags} {port_arg} "
             f"--script {scripts} "
+            f"{user_flags} "
             f"-oX {xml_out} {target}"
         )
         await self._log("info", f"Starting nmap: {cmd}")

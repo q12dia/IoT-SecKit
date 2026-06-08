@@ -639,6 +639,10 @@
             <label>自訂 Port（可選）</label>
             <input type="text" id="scan-ports" placeholder="留空＝IoT 預設清單" style="min-width:180px" />
           </div>
+          <div class="form-group">
+            <label>自訂參數（可選）</label>
+            <input type="text" id="scan-extra" placeholder="e.g. --script vuln  /  -sV --version-intensity 9  /  --traceroute" style="min-width:320px" />
+          </div>
           <button class="btn btn-primary" id="btn-scan-start" onclick="scannerStart()">
             <i class="ti ti-radar"></i> 啟動掃描
           </button>
@@ -917,7 +921,8 @@ let currentSession = null;   // { id, name, target_ip }
 let scannerWS      = null;
 
 // ── Module switching ──────────────────────────────────────────────────────────
-function switchModule(name) {
+function switchModule(name, pushHistory = true) {
+  if (!MODULE_META[name] && !["reports","settings"].includes(name)) return;
   document.querySelectorAll(".ni").forEach(el => el.classList.remove("active"));
   document.querySelector(`[data-m="${name}"]`)?.classList.add("active");
   document.querySelectorAll(".panel").forEach(el => el.classList.remove("active"));
@@ -927,7 +932,16 @@ function switchModule(name) {
     document.getElementById("tb-title").textContent = meta.title;
     document.getElementById("tb-meta").textContent  = meta.meta;
   }
+  if (pushHistory) {
+    history.pushState({ module: name }, "", `#${name}`);
+  }
 }
+
+// Handle browser back / forward
+window.addEventListener("popstate", (e) => {
+  const name = e.state?.module || "scanner";
+  switchModule(name, false);
+});
 
 // ── Session management ────────────────────────────────────────────────────────
 function openSessionModal() {
@@ -963,8 +977,9 @@ function scannerStart() {
   const target = document.getElementById("scan-target").value.trim();
   if (!target) { alert("請輸入目標 IP"); return; }
 
-  const depth = document.getElementById("scan-depth").value;
-  const ports = document.getElementById("scan-ports").value.trim() || undefined;
+  const depth      = document.getElementById("scan-depth").value;
+  const ports      = document.getElementById("scan-ports").value.trim() || undefined;
+  const extraFlags = document.getElementById("scan-extra").value.trim() || undefined;
 
   // Connect WebSocket first
   scannerWS = new WSClient("scanner", currentSession.id, {
@@ -986,7 +1001,7 @@ function scannerStart() {
   fetch("/api/scanner/start", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ session_id: currentSession.id, target, depth, ports }),
+    body: JSON.stringify({ session_id: currentSession.id, target, depth, ports, extra_flags: extraFlags }),
   }).then(r => r.json()).then(d => {
     logLine("scanner", "info", `[started] ${JSON.stringify(d)}`);
     setDot("scanner", "running");
@@ -1053,7 +1068,8 @@ function setDot(module, state) {
 }
 
 // ── Boot ──────────────────────────────────────────────────────────────────────
-switchModule("scanner");
+const _initModule = location.hash.replace("#", "") || "scanner";
+switchModule(_initModule);
 </script>
 </body>
 </html>
