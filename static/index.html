@@ -1,0 +1,1057 @@
+<!DOCTYPE html>
+<html lang="zh-TW" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>IoT SecKit</title>
+
+  <!-- Tabler Icons CDN -->
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/tabler-icons.min.css" />
+
+  <style>
+    /* ── CSS Custom Properties (design tokens) ────────────────────────────── */
+    :root {
+      --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", "Cascadia Code", "Fira Code", "Consolas",
+                   "Menlo", monospace;
+
+      /* Colours — dark mode default */
+      --color-bg-base:            #0d1117;
+      --color-bg-surface:         #161b22;
+      --color-bg-elevated:        #21262d;
+      --color-bg-sidebar:         #0d1117;
+
+      --color-border-tertiary:    rgba(255,255,255,0.08);
+      --color-border-secondary:   rgba(255,255,255,0.15);
+
+      --color-text-primary:       #e6edf3;
+      --color-text-secondary:     #8b949e;
+      --color-text-muted:         #484f58;
+
+      --color-accent-info:        #388bfd;
+      --color-accent-info-muted:  rgba(56,139,253,0.15);
+
+      /* Severity colours */
+      --color-background-danger:  rgba(218,54,51,0.15);
+      --color-text-danger:        #ff7b72;
+
+      --color-background-warning: rgba(210,153,34,0.15);
+      --color-text-warning:       #e3b341;
+
+      --color-background-success: rgba(35,134,54,0.15);
+      --color-text-success:       #3fb950;
+
+      /* Border radius */
+      --border-radius-lg:         12px;
+      --border-radius-md:         8px;
+      --border-radius-sm:         4px;
+
+      /* Sidebar */
+      --sidebar-width:            210px;
+      --topbar-height:            52px;
+    }
+
+    /* ── Reset / Base ──────────────────────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-bg-base);
+      color: var(--color-text-primary);
+      height: 100vh;
+      display: flex;
+      overflow: hidden;
+    }
+
+    /* ── Sidebar ───────────────────────────────────────────────────────────── */
+    #sidebar {
+      width: var(--sidebar-width);
+      min-width: var(--sidebar-width);
+      background: var(--color-bg-sidebar);
+      border-right: 0.5px solid var(--color-border-tertiary);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+      padding-bottom: 16px;
+    }
+
+    .sb-logo {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 16px 16px 12px;
+      border-bottom: 0.5px solid var(--color-border-tertiary);
+    }
+    .sb-logo-icon {
+      width: 30px; height: 30px;
+      background: var(--color-accent-info-muted);
+      border: 0.5px solid var(--color-accent-info);
+      border-radius: var(--border-radius-sm);
+      display: flex; align-items: center; justify-content: center;
+      color: var(--color-accent-info);
+      font-size: 15px;
+    }
+    .sb-logo-text {
+      font-size: 13px;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+      color: var(--color-text-primary);
+    }
+    .sb-logo-version {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-muted);
+    }
+
+    .sb-section {
+      padding: 14px 10px 4px;
+    }
+    .sb-section-label {
+      font-size: 10px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      color: var(--color-text-muted);
+      padding: 0 6px;
+      margin-bottom: 4px;
+    }
+    .sb-divider {
+      height: 0.5px;
+      background: var(--color-border-tertiary);
+      margin: 8px 10px;
+    }
+
+    /* Nav item */
+    .ni {
+      display: flex;
+      align-items: center;
+      gap: 9px;
+      padding: 7px 8px;
+      border-radius: var(--border-radius-sm);
+      cursor: pointer;
+      user-select: none;
+      position: relative;
+      transition: background 0.12s;
+    }
+    .ni:hover { background: var(--color-bg-elevated); }
+    .ni.active {
+      background: var(--color-accent-info-muted);
+      color: var(--color-accent-info);
+    }
+    .ni.active::after {
+      content: "";
+      position: absolute;
+      right: 0; top: 4px; bottom: 4px;
+      width: 2px;
+      background: var(--color-accent-info);
+      border-radius: 2px 0 0 2px;
+    }
+
+    .ni-num {
+      font-family: var(--font-mono);
+      font-size: 10px;
+      color: var(--color-text-muted);
+      width: 18px;
+      flex-shrink: 0;
+    }
+    .ni.active .ni-num { color: var(--color-accent-info); }
+
+    .ni-icon {
+      font-size: 15px;
+      flex-shrink: 0;
+      color: var(--color-text-secondary);
+    }
+    .ni.active .ni-icon { color: var(--color-accent-info); }
+
+    .ni-label {
+      font-size: 12.5px;
+      font-weight: 500;
+    }
+
+    .ni-badge {
+      margin-left: auto;
+      font-size: 9px;
+      font-family: var(--font-mono);
+      padding: 1px 5px;
+      border-radius: 10px;
+      background: var(--color-bg-elevated);
+      color: var(--color-text-muted);
+      border: 0.5px solid var(--color-border-tertiary);
+    }
+    .ni-badge.new {
+      background: var(--color-accent-info-muted);
+      color: var(--color-accent-info);
+      border-color: var(--color-accent-info);
+    }
+
+    /* Status dot */
+    .status-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--color-text-muted);
+      margin-left: auto;
+      flex-shrink: 0;
+    }
+    .status-dot.running {
+      background: var(--color-text-success);
+      animation: pulse-green 1.2s ease-in-out infinite;
+    }
+    .status-dot.capturing {
+      background: var(--color-text-danger);
+      animation: pulse-red 1.2s ease-in-out infinite;
+    }
+    @keyframes pulse-green {
+      0%,100% { box-shadow: 0 0 0 0 rgba(63,185,80,0.5); }
+      50%      { box-shadow: 0 0 0 4px rgba(63,185,80,0); }
+    }
+    @keyframes pulse-red {
+      0%,100% { box-shadow: 0 0 0 0 rgba(255,123,114,0.5); }
+      50%      { box-shadow: 0 0 0 4px rgba(255,123,114,0); }
+    }
+
+    /* ── Main area ─────────────────────────────────────────────────────────── */
+    #main {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* Topbar */
+    #topbar {
+      height: var(--topbar-height);
+      min-height: var(--topbar-height);
+      border-bottom: 0.5px solid var(--color-border-tertiary);
+      display: flex;
+      align-items: center;
+      padding: 0 20px;
+      gap: 12px;
+      background: var(--color-bg-surface);
+    }
+    #tb-title {
+      font-size: 14px;
+      font-weight: 600;
+    }
+    #tb-meta {
+      font-family: var(--font-mono);
+      font-size: 11px;
+      color: var(--color-text-muted);
+    }
+    .tb-spacer { flex: 1; }
+
+    /* Session pill */
+    #session-pill {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 10px;
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-md);
+      font-size: 11.5px;
+      cursor: pointer;
+      background: var(--color-bg-elevated);
+    }
+    #session-pill:hover { border-color: var(--color-accent-info); }
+    #session-pill .sp-label {
+      font-family: var(--font-mono);
+      color: var(--color-text-secondary);
+      font-size: 10px;
+    }
+    #session-pill .sp-target {
+      font-family: var(--font-mono);
+      color: var(--color-text-primary);
+    }
+
+    /* Panels container */
+    #panels {
+      flex: 1;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .panel {
+      display: none;
+      height: 100%;
+      overflow-y: auto;
+      padding: 20px;
+    }
+    .panel.active { display: flex; flex-direction: column; gap: 16px; }
+
+    /* ── Panel common components ───────────────────────────────────────────── */
+
+    /* Control card */
+    .ctrl-card {
+      background: var(--color-bg-surface);
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-lg);
+      padding: 16px;
+    }
+    .ctrl-card h3 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-secondary);
+      margin-bottom: 12px;
+    }
+
+    .form-row {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      align-items: flex-end;
+    }
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .form-group label {
+      font-size: 11px;
+      color: var(--color-text-secondary);
+      font-weight: 500;
+    }
+    .form-group input,
+    .form-group select {
+      background: var(--color-bg-elevated);
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-sm);
+      color: var(--color-text-primary);
+      font-family: var(--font-mono);
+      font-size: 12px;
+      padding: 6px 10px;
+      outline: none;
+      min-width: 140px;
+    }
+    .form-group input:focus,
+    .form-group select:focus {
+      border-color: var(--color-accent-info);
+    }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px;
+      border-radius: var(--border-radius-sm);
+      font-size: 12.5px;
+      font-weight: 500;
+      cursor: pointer;
+      border: none;
+      transition: opacity 0.1s;
+    }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-primary { background: var(--color-accent-info); color: #fff; }
+    .btn-primary:hover:not(:disabled) { opacity: 0.88; }
+    .btn-danger { background: #da3633; color: #fff; }
+    .btn-danger:hover:not(:disabled) { opacity: 0.88; }
+    .btn-ghost {
+      background: transparent;
+      border: 0.5px solid var(--color-border-secondary);
+      color: var(--color-text-secondary);
+    }
+    .btn-ghost:hover:not(:disabled) { background: var(--color-bg-elevated); }
+
+    /* Log console */
+    .log-console {
+      background: #0d1117;
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-md);
+      font-family: var(--font-mono);
+      font-size: 11px;
+      line-height: 1.65;
+      padding: 10px 12px;
+      overflow-y: auto;
+      height: 280px;
+      flex-shrink: 0;
+    }
+    .log-line { white-space: pre-wrap; word-break: break-all; }
+    .log-line.ok   { color: #3fb950; }
+    .log-line.warn { color: #e3b341; }
+    .log-line.err  { color: #ff7b72; }
+    .log-line.info { color: #79c0ff; }
+    .log-line.muted { color: #484f58; }
+
+    /* Results table */
+    .results-table {
+      background: var(--color-bg-surface);
+      border: 0.5px solid var(--color-border-tertiary);
+      border-radius: var(--border-radius-lg);
+      overflow: hidden;
+    }
+    .results-table table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+    }
+    .results-table thead th {
+      padding: 8px 12px;
+      text-align: left;
+      font-size: 10.5px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      color: var(--color-text-muted);
+      border-bottom: 0.5px solid var(--color-border-tertiary);
+      background: var(--color-bg-elevated);
+    }
+    .results-table tbody td {
+      padding: 8px 12px;
+      border-bottom: 0.5px solid var(--color-border-tertiary);
+      font-family: var(--font-mono);
+      font-size: 11.5px;
+      color: var(--color-text-secondary);
+    }
+    .results-table tbody tr:last-child td { border-bottom: none; }
+    .results-table tbody tr:hover td { background: var(--color-bg-elevated); }
+    .results-table .host-cell { color: var(--color-text-primary); }
+
+    /* Severity badge */
+    .sev {
+      display: inline-flex; align-items: center;
+      padding: 2px 7px;
+      border-radius: 10px;
+      font-size: 10px;
+      font-weight: 600;
+      font-family: var(--font-mono);
+      letter-spacing: 0.04em;
+      text-transform: uppercase;
+    }
+    .sev-critical { background: var(--color-background-danger);  color: var(--color-text-danger); }
+    .sev-high     { background: #3b2b00; color: #e3b341; }
+    .sev-medium   { background: var(--color-background-warning); color: var(--color-text-warning); }
+    .sev-low      { background: var(--color-background-success); color: var(--color-text-success); }
+    .sev-info     { background: var(--color-accent-info-muted);  color: var(--color-accent-info); }
+    .sev-iot      { background: rgba(139,71,198,0.18); color: #c084fc; }
+
+    /* Empty-state placeholder */
+    .empty-state {
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 48px 20px;
+      color: var(--color-text-muted);
+      gap: 10px;
+    }
+    .empty-state i { font-size: 36px; }
+    .empty-state p { font-size: 13px; }
+
+    /* ── Session modal ─────────────────────────────────────────────────────── */
+    #modal-overlay {
+      display: none;
+      position: fixed; inset: 0;
+      background: rgba(0,0,0,0.6);
+      z-index: 100;
+      align-items: center; justify-content: center;
+    }
+    #modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--color-bg-surface);
+      border: 0.5px solid var(--color-border-secondary);
+      border-radius: var(--border-radius-lg);
+      padding: 24px;
+      width: 400px;
+    }
+    .modal h2 {
+      font-size: 14px; font-weight: 600; margin-bottom: 16px;
+    }
+    .modal .form-group { margin-bottom: 12px; }
+    .modal .form-group input {
+      width: 100%;
+    }
+    .modal-actions {
+      display: flex; gap: 8px; justify-content: flex-end; margin-top: 16px;
+    }
+  </style>
+</head>
+<body>
+
+<!-- ── Sidebar ──────────────────────────────────────────────────────────────── -->
+<nav id="sidebar">
+
+  <div class="sb-logo">
+    <div class="sb-logo-icon"><i class="ti ti-shield-lock"></i></div>
+    <div>
+      <div class="sb-logo-text">IoT SecKit</div>
+      <div class="sb-logo-version">v1.0.0</div>
+    </div>
+  </div>
+
+  <!-- Testing Tools -->
+  <div class="sb-section">
+    <div class="sb-section-label">測試工具</div>
+
+    <div class="ni" data-m="fuzzing" onclick="switchModule('fuzzing')">
+      <span class="ni-num">01</span>
+      <i class="ti ti-bug ni-icon"></i>
+      <span class="ni-label">模糊測試</span>
+      <span class="status-dot" id="dot-fuzzing"></span>
+    </div>
+
+    <div class="ni active" data-m="scanner" onclick="switchModule('scanner')">
+      <span class="ni-num">02</span>
+      <i class="ti ti-radar ni-icon"></i>
+      <span class="ni-label">掃描器</span>
+      <span class="status-dot" id="dot-scanner"></span>
+    </div>
+
+    <div class="ni" data-m="credential" onclick="switchModule('credential')">
+      <span class="ni-num">03</span>
+      <i class="ti ti-certificate ni-icon"></i>
+      <span class="ni-label">憑證分析</span>
+      <span class="status-dot" id="dot-credential"></span>
+    </div>
+
+    <div class="ni" data-m="firmware" onclick="switchModule('firmware')">
+      <span class="ni-num">04</span>
+      <i class="ti ti-cpu ni-icon"></i>
+      <span class="ni-label">韌體分析</span>
+      <span class="status-dot" id="dot-firmware"></span>
+    </div>
+
+    <div class="ni" data-m="traffic" onclick="switchModule('traffic')">
+      <span class="ni-num">05</span>
+      <i class="ti ti-network ni-icon"></i>
+      <span class="ni-label">流量攔截</span>
+      <span class="status-dot" id="dot-traffic"></span>
+    </div>
+  </div>
+
+  <div class="sb-divider"></div>
+
+  <!-- Vulnerability Validation -->
+  <div class="sb-section">
+    <div class="sb-section-label">弱點驗證</div>
+
+    <div class="ni" data-m="devscan" onclick="switchModule('devscan')">
+      <span class="ni-num">06</span>
+      <i class="ti ti-device-desktop-search ni-icon"></i>
+      <span class="ni-label">設備弱點掃描</span>
+      <span class="ni-badge new">NEW</span>
+    </div>
+
+    <div class="ni" data-m="webscan" onclick="switchModule('webscan')">
+      <span class="ni-num">07</span>
+      <i class="ti ti-world-search ni-icon"></i>
+      <span class="ni-label">網頁弱點掃描</span>
+      <span class="ni-badge new">NEW</span>
+    </div>
+  </div>
+
+  <div class="sb-divider"></div>
+
+  <!-- System -->
+  <div class="sb-section">
+    <div class="sb-section-label">系統</div>
+
+    <div class="ni" data-m="reports" onclick="switchModule('reports')">
+      <span class="ni-num" style="opacity:0"></span>
+      <i class="ti ti-report ni-icon"></i>
+      <span class="ni-label">測試報告</span>
+    </div>
+
+    <div class="ni" data-m="settings" onclick="switchModule('settings')">
+      <span class="ni-num" style="opacity:0"></span>
+      <i class="ti ti-settings ni-icon"></i>
+      <span class="ni-label">設定</span>
+    </div>
+  </div>
+
+</nav>
+
+<!-- ── Main ──────────────────────────────────────────────────────────────────── -->
+<div id="main">
+
+  <!-- Topbar -->
+  <div id="topbar">
+    <span id="tb-title">掃描器 (Scanner)</span>
+    <span id="tb-meta">nmap 7.94 + NSE Scripts</span>
+    <span class="tb-spacer"></span>
+    <div id="session-pill" onclick="openSessionModal()">
+      <span class="sp-label">SESSION</span>
+      <span class="sp-target" id="sp-target">— 未選擇 —</span>
+      <i class="ti ti-chevron-down" style="font-size:11px; color:var(--color-text-muted)"></i>
+    </div>
+  </div>
+
+  <!-- Panels -->
+  <div id="panels">
+
+    <!-- ── 01 模糊測試 ── -->
+    <div class="panel" id="panel-fuzzing">
+      <div class="ctrl-card">
+        <h3>模糊測試設定</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>目標 IP</label>
+            <input type="text" id="fuzz-target" placeholder="192.168.1.1" />
+          </div>
+          <div class="form-group">
+            <label>協定</label>
+            <select id="fuzz-proto">
+              <option value="http">HTTP</option>
+              <option value="mqtt">MQTT</option>
+              <option value="modbus">Modbus</option>
+              <option value="coap">CoAP</option>
+              <option value="tcp_udp">TCP/UDP</option>
+              <option value="icmp">ICMP</option>
+              <option value="uart">UART</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>變異策略</label>
+            <select id="fuzz-strategy">
+              <option value="random">random</option>
+              <option value="boundary">boundary</option>
+              <option value="bit_flip">bit-flip</option>
+              <option value="dict">dict</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="btn-fuzz-start">
+            <i class="ti ti-play"></i> 啟動
+          </button>
+          <button class="btn btn-danger" id="btn-fuzz-stop" disabled>
+            <i class="ti ti-square"></i> 停止
+          </button>
+        </div>
+      </div>
+      <div class="log-console" id="log-fuzzing">
+        <div class="log-line muted">// 等待啟動模糊測試...</div>
+      </div>
+    </div>
+
+    <!-- ── 02 掃描器 ── -->
+    <div class="panel active" id="panel-scanner">
+      <div class="ctrl-card">
+        <h3>nmap 掃描設定</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>目標 IP / 範圍</label>
+            <input type="text" id="scan-target" placeholder="192.168.1.0/24" />
+          </div>
+          <div class="form-group">
+            <label>掃描深度</label>
+            <select id="scan-depth">
+              <option value="quick">quick — -sn -T4</option>
+              <option value="standard" selected>standard — -sV -T3</option>
+              <option value="deep">deep — -sV -O -A -T2</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>自訂 Port（可選）</label>
+            <input type="text" id="scan-ports" placeholder="留空＝IoT 預設清單" style="min-width:180px" />
+          </div>
+          <button class="btn btn-primary" id="btn-scan-start" onclick="scannerStart()">
+            <i class="ti ti-radar"></i> 啟動掃描
+          </button>
+          <button class="btn btn-danger" id="btn-scan-stop" disabled onclick="scannerStop()">
+            <i class="ti ti-square"></i> 停止
+          </button>
+        </div>
+      </div>
+
+      <div class="log-console" id="log-scanner">
+        <div class="log-line muted">// 等待啟動掃描...</div>
+      </div>
+
+      <div class="results-table" id="scanner-results-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th>Host</th><th>Port</th><th>Proto</th>
+              <th>Service</th><th>Version</th><th>Flag</th>
+            </tr>
+          </thead>
+          <tbody id="scanner-results-tbody">
+            <tr><td colspan="6">
+              <div class="empty-state">
+                <i class="ti ti-radar"></i>
+                <p>尚無掃描結果</p>
+              </div>
+            </td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── 03 憑證分析 ── -->
+    <div class="panel" id="panel-credential">
+      <div class="ctrl-card">
+        <h3>TLS / 密碼掃描</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>目標 Host:Port</label>
+            <input type="text" id="cred-target" placeholder="192.168.1.1:443" />
+          </div>
+          <div class="form-group">
+            <label>設備廠牌</label>
+            <select id="cred-brand">
+              <option value="">— 自動偵測 —</option>
+              <option value="hikvision">Hikvision</option>
+              <option value="dahua">Dahua</option>
+              <option value="dlink">D-Link</option>
+              <option value="tplink">TP-Link</option>
+              <option value="asus">ASUS</option>
+              <option value="netgear">Netgear</option>
+              <option value="axis">Axis</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="btn-cred-start">
+            <i class="ti ti-certificate"></i> 啟動分析
+          </button>
+          <button class="btn btn-danger" id="btn-cred-stop" disabled>
+            <i class="ti ti-square"></i> 停止
+          </button>
+        </div>
+      </div>
+      <div class="log-console" id="log-credential">
+        <div class="log-line muted">// 等待啟動憑證分析...</div>
+      </div>
+    </div>
+
+    <!-- ── 04 韌體分析 ── -->
+    <div class="panel" id="panel-firmware">
+      <div class="ctrl-card">
+        <h3>韌體上傳與分析</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>韌體檔案</label>
+            <input type="file" id="fw-file" accept=".bin,.img,.gz,.zip,.tar" />
+          </div>
+          <button class="btn btn-primary" id="btn-fw-start">
+            <i class="ti ti-cpu"></i> 上傳並分析
+          </button>
+          <button class="btn btn-danger" id="btn-fw-stop" disabled>
+            <i class="ti ti-square"></i> 停止
+          </button>
+        </div>
+      </div>
+      <!-- Progress bar -->
+      <div class="ctrl-card">
+        <h3>分析進度</h3>
+        <div id="fw-phases" style="display:flex; flex-direction:column; gap:10px; font-size:12px; font-family:var(--font-mono)">
+          <div id="fw-phase-1" style="color:var(--color-text-muted)">Phase 1 — Binwalk 解包</div>
+          <div id="fw-phase-2" style="color:var(--color-text-muted)">Phase 2 — Firmwalker 敏感掃描</div>
+          <div id="fw-phase-3" style="color:var(--color-text-muted)">Phase 3 — checksec ELF 分析</div>
+          <div id="fw-phase-4" style="color:var(--color-text-muted)">Phase 4 — 彙整報告</div>
+        </div>
+      </div>
+      <div class="log-console" id="log-firmware">
+        <div class="log-line muted">// 等待上傳韌體檔案...</div>
+      </div>
+    </div>
+
+    <!-- ── 05 流量攔截 ── -->
+    <div class="panel" id="panel-traffic">
+      <div class="ctrl-card">
+        <h3>流量擷取設定</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>網路介面</label>
+            <select id="traffic-iface"><option value="">載入中...</option></select>
+          </div>
+          <div class="form-group">
+            <label>BPF Filter（可選）</label>
+            <input type="text" id="traffic-bpf" placeholder="host 192.168.1.1" style="min-width:200px" />
+          </div>
+          <button class="btn btn-primary" id="btn-traffic-start">
+            <i class="ti ti-network"></i> 開始擷取
+          </button>
+          <button class="btn btn-danger" id="btn-traffic-stop" disabled>
+            <i class="ti ti-square"></i> 停止並存檔
+          </button>
+        </div>
+      </div>
+      <div class="log-console" id="log-traffic">
+        <div class="log-line muted">// 等待啟動流量攔截...</div>
+      </div>
+    </div>
+
+    <!-- ── 06 設備弱點掃描 ── -->
+    <div class="panel" id="panel-devscan">
+      <div class="ctrl-card">
+        <h3>設備弱點掃描</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>目標 IP</label>
+            <input type="text" id="dev-target" placeholder="192.168.1.1" />
+          </div>
+          <div class="form-group">
+            <label>掃描工具</label>
+            <select id="dev-tools">
+              <option value="all">All (OpenVAS + RouterSploit + MSF)</option>
+              <option value="routersploit">RouterSploit only</option>
+              <option value="openvas">OpenVAS only</option>
+              <option value="msf">Metasploit auxiliary only</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="btn-dev-start">
+            <i class="ti ti-device-desktop-search"></i> 啟動掃描
+          </button>
+          <button class="btn btn-danger" id="btn-dev-stop" disabled>
+            <i class="ti ti-square"></i> 停止
+          </button>
+        </div>
+      </div>
+      <div class="log-console" id="log-devscan">
+        <div class="log-line muted">// 等待啟動設備弱點掃描...</div>
+      </div>
+    </div>
+
+    <!-- ── 07 網頁弱點掃描 ── -->
+    <div class="panel" id="panel-webscan">
+      <div class="ctrl-card">
+        <h3>網頁弱點掃描</h3>
+        <div class="form-row">
+          <div class="form-group">
+            <label>目標 URL</label>
+            <input type="text" id="web-target" placeholder="http://192.168.1.1" style="min-width:220px" />
+          </div>
+          <div class="form-group">
+            <label>掃描工具</label>
+            <select id="web-tools">
+              <option value="all">All (Nikto + ZAP + Gobuster)</option>
+              <option value="nikto">Nikto only</option>
+              <option value="zap">OWASP ZAP only</option>
+              <option value="gobuster">Gobuster only</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" id="btn-web-start">
+            <i class="ti ti-world-search"></i> 啟動掃描
+          </button>
+          <button class="btn btn-danger" id="btn-web-stop" disabled>
+            <i class="ti ti-square"></i> 停止
+          </button>
+        </div>
+      </div>
+      <div class="log-console" id="log-webscan">
+        <div class="log-line muted">// 等待啟動網頁弱點掃描...</div>
+      </div>
+    </div>
+
+    <!-- ── 報告 ── -->
+    <div class="panel" id="panel-reports">
+      <div class="ctrl-card">
+        <h3>PDF 報告產生</h3>
+        <div class="form-row">
+          <button class="btn btn-primary" id="btn-gen-report">
+            <i class="ti ti-file-type-pdf"></i> 產生完整報告
+          </button>
+          <button class="btn btn-ghost" id="btn-dl-report" disabled>
+            <i class="ti ti-download"></i> 下載 PDF
+          </button>
+        </div>
+      </div>
+      <div class="empty-state">
+        <i class="ti ti-report"></i>
+        <p>選擇會話後可產生完整 PDF 評估報告</p>
+      </div>
+    </div>
+
+    <!-- ── 設定 ── -->
+    <div class="panel" id="panel-settings">
+      <div class="ctrl-card">
+        <h3>工具路徑設定</h3>
+        <div class="form-group" style="margin-bottom:10px">
+          <label>nmap binary</label>
+          <input type="text" value="/usr/bin/nmap" style="width:300px" />
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label>testssl.sh</label>
+          <input type="text" value="/opt/testssl/testssl.sh" style="width:300px" />
+        </div>
+        <div class="form-group" style="margin-bottom:10px">
+          <label>binwalk</label>
+          <input type="text" value="/usr/bin/binwalk" style="width:300px" />
+        </div>
+        <button class="btn btn-primary" style="margin-top:4px">
+          <i class="ti ti-device-floppy"></i> 儲存設定
+        </button>
+      </div>
+    </div>
+
+  </div><!-- /panels -->
+</div><!-- /main -->
+
+<!-- ── Session Modal ─────────────────────────────────────────────────────────── -->
+<div id="modal-overlay">
+  <div class="modal">
+    <h2><i class="ti ti-plus"></i> 建立新測試會話</h2>
+    <div class="form-group">
+      <label>會話名稱</label>
+      <input type="text" id="m-sess-name" placeholder="2026-06-08 D-Link 路由器測試" />
+    </div>
+    <div class="form-group">
+      <label>目標 IP</label>
+      <input type="text" id="m-sess-ip" placeholder="192.168.1.1" />
+    </div>
+    <div class="form-group">
+      <label>設備描述</label>
+      <input type="text" id="m-sess-desc" placeholder="D-Link DIR-825 路由器" />
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeSessionModal()">取消</button>
+      <button class="btn btn-primary" onclick="createSession()">
+        <i class="ti ti-check"></i> 建立
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- ── JS ────────────────────────────────────────────────────────────────────── -->
+<script src="/static/js/ws-client.js"></script>
+<script>
+// ── Module metadata ───────────────────────────────────────────────────────────
+const MODULE_META = {
+  fuzzing:    { title: "模糊測試 (Fuzzing)",               meta: "Boofuzz + Scapy" },
+  scanner:    { title: "掃描器 (Scanner)",                 meta: "nmap 7.94 + NSE Scripts" },
+  credential: { title: "憑證分析 (Credential Analysis)",   meta: "testssl.sh · sslyze · Hydra" },
+  firmware:   { title: "韌體分析 (Firmware Analysis)",     meta: "Binwalk · Firmwalker · checksec" },
+  traffic:    { title: "流量攔截 (Traffic Interception)",  meta: "tcpdump · PyShark · Scapy" },
+  devscan:    { title: "設備弱點掃描 (Device Vuln Scan)",  meta: "OpenVAS · RouterSploit · Metasploit" },
+  webscan:    { title: "網頁弱點掃描 (Web Vuln Scan)",     meta: "Nikto · OWASP ZAP · Gobuster · SQLMap" },
+  reports:    { title: "測試報告",                         meta: "Jinja2 · WeasyPrint" },
+  settings:   { title: "系統設定",                         meta: "" },
+};
+
+// ── Global state ──────────────────────────────────────────────────────────────
+let currentSession = null;   // { id, name, target_ip }
+let scannerWS      = null;
+
+// ── Module switching ──────────────────────────────────────────────────────────
+function switchModule(name) {
+  document.querySelectorAll(".ni").forEach(el => el.classList.remove("active"));
+  document.querySelector(`[data-m="${name}"]`)?.classList.add("active");
+  document.querySelectorAll(".panel").forEach(el => el.classList.remove("active"));
+  document.getElementById(`panel-${name}`)?.classList.add("active");
+  const meta = MODULE_META[name];
+  if (meta) {
+    document.getElementById("tb-title").textContent = meta.title;
+    document.getElementById("tb-meta").textContent  = meta.meta;
+  }
+}
+
+// ── Session management ────────────────────────────────────────────────────────
+function openSessionModal() {
+  document.getElementById("modal-overlay").classList.add("open");
+}
+function closeSessionModal() {
+  document.getElementById("modal-overlay").classList.remove("open");
+}
+async function createSession() {
+  const name = document.getElementById("m-sess-name").value.trim();
+  const ip   = document.getElementById("m-sess-ip").value.trim();
+  const desc = document.getElementById("m-sess-desc").value.trim();
+  if (!name || !ip) { alert("請填寫會話名稱與目標 IP"); return; }
+
+  const res  = await fetch("/api/sessions", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ name, target_ip: ip, target_desc: desc }),
+  });
+  const data = await res.json();
+  currentSession = data;
+  document.getElementById("sp-target").textContent = `${data.name} · ${data.target_ip}`;
+  closeSessionModal();
+  logLine("scanner", "info", `[session] 已建立 #${data.id}: ${data.name} → ${data.target_ip}`);
+}
+
+// ── Scanner UI ────────────────────────────────────────────────────────────────
+function scannerStart() {
+  if (!currentSession) {
+    alert("請先建立或選擇測試會話（點擊右上角 SESSION）");
+    return;
+  }
+  const target = document.getElementById("scan-target").value.trim();
+  if (!target) { alert("請輸入目標 IP"); return; }
+
+  const depth = document.getElementById("scan-depth").value;
+  const ports = document.getElementById("scan-ports").value.trim() || undefined;
+
+  // Connect WebSocket first
+  scannerWS = new WSClient("scanner", currentSession.id, {
+    log:     (d) => logLine("scanner", d.level, d.msg),
+    result:  (d) => appendScanResult(d),
+    alert:   (d) => logLine("scanner", "err", `[ALERT ${d.severity}] ${d.title}: ${d.detail}`),
+    progress:(d) => logLine("scanner", "info", `[progress] ${d.phase_name} ${d.pct}%`),
+    done:    (d) => {
+      logLine("scanner", "ok", `[done] 掃描完成，共 ${d.total_findings ?? 0} 個結果`);
+      setDot("scanner", "idle");
+      document.getElementById("btn-scan-start").disabled = false;
+      document.getElementById("btn-scan-stop").disabled  = true;
+    },
+    error:   (d) => logLine("scanner", "err", `[error] ${d.msg}`),
+    suggestions: (d) => logLine("scanner", "info", `[建議後續模組] ${d.join(", ")}`),
+  });
+  scannerWS.connect();
+
+  fetch("/api/scanner/start", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: currentSession.id, target, depth, ports }),
+  }).then(r => r.json()).then(d => {
+    logLine("scanner", "info", `[started] ${JSON.stringify(d)}`);
+    setDot("scanner", "running");
+    document.getElementById("btn-scan-start").disabled = true;
+    document.getElementById("btn-scan-stop").disabled  = false;
+  }).catch(e => logLine("scanner", "err", String(e)));
+}
+
+function scannerStop() {
+  if (!currentSession) return;
+  fetch("/api/scanner/stop", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ session_id: currentSession.id }),
+  }).then(() => {
+    setDot("scanner", "idle");
+    document.getElementById("btn-scan-start").disabled = false;
+    document.getElementById("btn-scan-stop").disabled  = true;
+  });
+}
+
+// ── Results table helpers ─────────────────────────────────────────────────────
+function appendScanResult(d) {
+  const tbody = document.getElementById("scanner-results-tbody");
+  // Remove empty-state row on first result
+  if (tbody.querySelector(".empty-state")) tbody.innerHTML = "";
+
+  const iotBadge = d.is_iot
+    ? `<span class="sev sev-iot">IoT</span>`
+    : `<span style="color:var(--color-text-muted)">—</span>`;
+
+  tbody.insertAdjacentHTML("beforeend", `
+    <tr>
+      <td class="host-cell">${d.host}</td>
+      <td>${d.port}</td>
+      <td>${d.protocol}</td>
+      <td>${d.service}</td>
+      <td>${d.version || "—"}</td>
+      <td>${iotBadge}</td>
+    </tr>`);
+}
+
+// ── Log console helpers ───────────────────────────────────────────────────────
+function logLine(module, level, msg) {
+  const el = document.getElementById(`log-${module}`);
+  if (!el) return;
+  const cls = { ok:"ok", info:"info", warn:"warn", err:"err", error:"err" }[level] || "muted";
+  const ts  = new Date().toISOString().substr(11, 12);
+  el.insertAdjacentHTML("beforeend",
+    `<div class="log-line ${cls}">[${ts}] ${escHtml(msg)}</div>`);
+  el.scrollTop = el.scrollHeight;
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+// ── Status dot ────────────────────────────────────────────────────────────────
+function setDot(module, state) {
+  const dot = document.getElementById(`dot-${module}`);
+  if (!dot) return;
+  dot.className = "status-dot" + (state !== "idle" ? ` ${state}` : "");
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+switchModule("scanner");
+</script>
+</body>
+</html>
