@@ -138,15 +138,20 @@ class NmapRunner(BaseRunner):
                 if port in IOT_SERVICE_RULES:
                     service = IOT_SERVICE_RULES[port]["service"]
 
+                scripts_out = self._extract_scripts(port_el)
+                cves        = self._extract_cves(port_el)
+
                 result = {
-                    "host": host_ip,
-                    "port": port,
-                    "protocol": protocol,
-                    "service": service,
-                    "version": version,
-                    "banner": banner,
-                    "os_guess": os_guess,
-                    "is_iot": is_iot,
+                    "host":        host_ip,
+                    "port":        port,
+                    "protocol":    protocol,
+                    "service":     service,
+                    "version":     version,
+                    "banner":      banner,
+                    "os_guess":    os_guess,
+                    "is_iot":      is_iot,
+                    "scripts":     scripts_out,   # [{"id": ..., "output": ...}]
+                    "cves":        cves,           # [{"id": ..., "cvss": ...}]
                 }
                 await self._result(result)
                 self._save_scan_result(result)
@@ -178,6 +183,34 @@ class NmapRunner(BaseRunner):
             if script.get("id") == "banner":
                 return script.get("output", "")
         return ""
+
+    def _extract_scripts(self, port_el: ET.Element) -> list[dict]:
+        results = []
+        for script in port_el.findall("script"):
+            sid = script.get("id", "")
+            out = script.get("output", "").strip()
+            if sid and out and sid != "banner":
+                results.append({"id": sid, "output": out})
+        return results
+
+    def _extract_cves(self, port_el: ET.Element) -> list[dict]:
+        cves = []
+        for script in port_el.findall("script"):
+            if script.get("id") != "vulners":
+                continue
+            # vulners outputs nested <table> elements per CVE
+            for tbl in script.findall(".//table"):
+                cve_id = ""
+                cvss   = ""
+                for elem in tbl.findall("elem"):
+                    key = elem.get("key", "")
+                    if key == "id":
+                        cve_id = elem.text or ""
+                    elif key == "cvss":
+                        cvss = elem.text or ""
+                if cve_id:
+                    cves.append({"id": cve_id, "cvss": cvss})
+        return cves[:10]  # cap at 10 per port
 
     def _save_scan_result(self, data: dict):
         if self.db is None:

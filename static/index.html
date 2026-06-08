@@ -660,12 +660,14 @@
         <table>
           <thead>
             <tr>
+              <th style="width:32px"></th>
               <th>Host</th><th>Port</th><th>Proto</th>
-              <th>Service</th><th>Version</th><th>Flag</th>
+              <th>Service</th><th>Version</th><th>OS</th>
+              <th>Banner / Info</th><th>Flag</th>
             </tr>
           </thead>
           <tbody id="scanner-results-tbody">
-            <tr><td colspan="6">
+            <tr><td colspan="9">
               <div class="empty-state">
                 <i class="ti ti-radar"></i>
                 <p>尚無掃描結果</p>
@@ -1024,24 +1026,90 @@ function scannerStop() {
 }
 
 // ── Results table helpers ─────────────────────────────────────────────────────
+let _scanRowId = 0;
+
 function appendScanResult(d) {
   const tbody = document.getElementById("scanner-results-tbody");
-  // Remove empty-state row on first result
   if (tbody.querySelector(".empty-state")) tbody.innerHTML = "";
 
+  const rowId  = `sr-${++_scanRowId}`;
   const iotBadge = d.is_iot
     ? `<span class="sev sev-iot">IoT</span>`
     : `<span style="color:var(--color-text-muted)">—</span>`;
 
+  // Info cell: banner first line or first script name
+  const infoText = (d.banner || (d.scripts?.[0]?.output) || "—")
+    .replace(/\n/g, " ").substring(0, 80);
+
+  // Has detail rows?
+  const hasDetail = (d.scripts?.length > 0) || (d.cves?.length > 0);
+  const chevron   = hasDetail
+    ? `<i class="ti ti-chevron-right" style="font-size:11px;color:var(--color-text-muted);transition:transform .15s" id="chv-${rowId}"></i>`
+    : "";
+
   tbody.insertAdjacentHTML("beforeend", `
-    <tr>
+    <tr id="row-${rowId}" style="cursor:${hasDetail ? "pointer" : "default"}"
+        ${hasDetail ? `onclick="toggleDetail('${rowId}')"` : ""}>
+      <td style="text-align:center;width:32px">${chevron}</td>
       <td class="host-cell">${d.host}</td>
       <td>${d.port}</td>
       <td>${d.protocol}</td>
       <td>${d.service}</td>
-      <td>${d.version || "—"}</td>
+      <td>${escHtml(d.version || "—")}</td>
+      <td style="color:var(--color-text-muted)">${escHtml(d.os_guess || "—")}</td>
+      <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
+          title="${escHtml(d.banner || "")}">${escHtml(infoText)}</td>
       <td>${iotBadge}</td>
     </tr>`);
+
+  if (hasDetail) {
+    // Build detail HTML
+    let detailHtml = `<div style="display:flex;flex-direction:column;gap:10px;padding:10px 12px 14px">`;
+
+    if (d.cves?.length > 0) {
+      detailHtml += `<div>
+        <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+                    color:var(--color-text-muted);margin-bottom:6px">CVE (vulners)</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px">`;
+      for (const cve of d.cves) {
+        const score  = parseFloat(cve.cvss) || 0;
+        const cls    = score >= 9 ? "sev-critical" : score >= 7 ? "sev-high" :
+                       score >= 4 ? "sev-medium"   : "sev-low";
+        detailHtml += `<span class="sev ${cls}">${escHtml(cve.id)} ${cve.cvss ? `(${cve.cvss})` : ""}</span>`;
+      }
+      detailHtml += `</div></div>`;
+    }
+
+    if (d.scripts?.length > 0) {
+      for (const s of d.scripts) {
+        detailHtml += `<div>
+          <div style="font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;
+                      color:var(--color-accent-info);margin-bottom:4px">${escHtml(s.id)}</div>
+          <pre style="margin:0;font-size:11px;color:var(--color-text-secondary);
+                      white-space:pre-wrap;word-break:break-all">${escHtml(s.output)}</pre>
+        </div>`;
+      }
+    }
+
+    detailHtml += `</div>`;
+
+    tbody.insertAdjacentHTML("beforeend", `
+      <tr id="det-${rowId}" style="display:none">
+        <td colspan="9" style="padding:0;background:var(--color-bg-elevated);
+            border-bottom:0.5px solid var(--color-border-secondary)">
+          ${detailHtml}
+        </td>
+      </tr>`);
+  }
+}
+
+function toggleDetail(rowId) {
+  const det = document.getElementById(`det-${rowId}`);
+  const chv = document.getElementById(`chv-${rowId}`);
+  if (!det) return;
+  const open = det.style.display === "none";
+  det.style.display = open ? "table-row" : "none";
+  if (chv) chv.style.transform = open ? "rotate(90deg)" : "";
 }
 
 // ── Log console helpers ───────────────────────────────────────────────────────
