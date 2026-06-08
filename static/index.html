@@ -778,6 +778,15 @@
           <button class="btn btn-danger" id="btn-fw-stop" disabled onclick="firmwareStop()">
             <i class="ti ti-square"></i> 停止
           </button>
+          <button class="btn btn-ghost" id="btn-fw-report" disabled onclick="showFwReport()">
+            <i class="ti ti-file-report"></i> 韌體報告
+          </button>
+          <div class="form-group">
+            <label>歷史記錄</label>
+            <select id="fw-history-select" onchange="openFwHistoryReport(this.value)">
+              <option value="">— 選擇過往分析 —</option>
+            </select>
+          </div>
         </div>
       </div>
       <!-- Progress bar -->
@@ -1670,9 +1679,11 @@ function _buildCredReportHtml(entry) {
 }
 
 // ── Firmware UI ───────────────────────────────────────────────────────────────
+let _fwResults = [];
+let _fwAlerts  = [];
+let _fwMeta    = null;
 
 function _fwPhaseUpdate(phase, pct) {
-  // phase 1-4, pct 0-100
   const phases = ["fw-phase-1","fw-phase-2","fw-phase-3","fw-phase-4"];
   phases.forEach((id, idx) => {
     const el = document.getElementById(id);
@@ -1700,37 +1711,69 @@ async function firmwareStart() {
   if (!fileInput.files.length) { alert("請選擇韌體檔案"); return; }
   const file = fileInput.files[0];
 
+  // Reset state
+  _fwResults = [];
+  _fwAlerts  = [];
+  _fwMeta = {
+    filename:  file.name,
+    filesize:  (file.size / 1024).toFixed(1) + " KB",
+    startedAt: new Date().toLocaleString("zh-TW"),
+    sess:      currentSession,
+  };
+  document.getElementById("btn-fw-report").disabled = true;
+
   // Reset phase colours
   ["fw-phase-1","fw-phase-2","fw-phase-3","fw-phase-4"].forEach(id => {
     const el = document.getElementById(id);
-    if (el) el.style.color = "var(--color-text-muted)";
+    if (el) {
+      el.style.color = "var(--color-text-muted)";
+      const pctEl = el.querySelector(".fw-pct");
+      if (pctEl) pctEl.textContent = "";
+    }
   });
 
   document.getElementById("btn-fw-start").disabled = true;
   document.getElementById("btn-fw-stop").disabled  = false;
   setDot("firmware", "running");
-  logLine("firmware", "info", `[upload] ${file.name} (${(file.size/1024).toFixed(1)} KB)`);
+  logLine("firmware", "info", "[upload] " + file.name + " (" + (file.size/1024).toFixed(1) + " KB)");
 
   // Connect WS before upload so we catch all messages
   firmwareWS = new WSClient("firmware", currentSession.id, {
     log:      (d) => logLine("firmware", d.level, d.msg),
     result:   (d) => {
+      _fwResults.push(d);
       const cls = { critical:"err", high:"err", medium:"warn", low:"warn" }[d.severity] || "info";
-      logLine("firmware", cls, `[${d.severity?.toUpperCase()}] ${d.title}: ${d.detail || ""}`);
+      logLine("firmware", cls, "[" + (d.severity||"info").toUpperCase() + "] " + d.title + ": " + (d.detail || ""));
     },
-    alert:    (d) => logLine("firmware", "err", `[ALERT ${d.severity?.toUpperCase()}] ${d.title}: ${d.detail}`),
+    alert:    (d) => {
+      _fwAlerts.push(d);
+      logLine("firmware", "err", "[ALERT " + (d.severity||"").toUpperCase() + "] " + d.title + ": " + d.detail);
+    },
     progress: (d) => {
-      logLine("firmware", "info", `[Phase ${d.phase}] ${d.phase_name} — ${d.pct}%`);
+      logLine("firmware", "info", "[Phase " + d.phase + "] " + d.phase_name + " — " + d.pct + "%");
       _fwPhaseUpdate(d.phase, d.pct);
     },
     done:     (d) => {
-      logLine("firmware", "ok", `[done] 韌體分析完成，共 ${d.total_findings ?? 0} 個發現`);
-      _fwPhaseUpdate(5, 100); // mark all done
+      logLine("firmware", "ok", "[done] 韌體分析完成，共 " + (d.total_findings ?? 0) + " 個發現");
+      _fwPhaseUpdate(5, 100);
+      const _entry = {
+        id:       _fwMeta._entryId || (_fwMeta._entryId = Date.now()),
+        label:    (_fwMeta.sess?.name || "—") + " · " + _fwMeta.filename + " · " + new Date().toLocaleString("zh-TW"),
+        ..._fwMeta,
+        doneAt:   new Date().toLocaleString("zh-TW"),
+        results:  [..._fwResults],
+        alerts:   [..._fwAlerts],
+      };
+      _saveFwHistory(_entry);
+      _loadFwHistory();
+      document.getElementById("btn-fw-report").disabled = false;
+      const conc = _fwConclusion(_fwResults, _fwAlerts);
+      logLine("firmware", conc.level === "ok" ? "ok" : "warn", "[結論] " + conc.text);
       setDot("firmware", "idle");
       document.getElementById("btn-fw-start").disabled = false;
       document.getElementById("btn-fw-stop").disabled  = true;
     },
-    error:    (d) => logLine("firmware", "err", `[error] ${d.msg}`),
+    error:    (d) => logLine("firmware", "err", "[error] " + d.msg),
   });
   firmwareWS.connect();
 
@@ -1740,19 +1783,19 @@ async function firmwareStart() {
   let uploadOk = false;
   try {
     const upRes = await fetch(
-      `/api/firmware/upload?session_id=${currentSession.id}`,
+      "/api/firmware/upload?session_id=" + currentSession.id,
       { method: "POST", body: fd }
     );
     if (!upRes.ok) {
       const err = await upRes.json().catch(() => ({ detail: upRes.statusText }));
-      logLine("firmware", "err", `[upload error] ${err.detail || upRes.statusText}`);
+      logLine("firmware", "err", "[upload error] " + (err.detail || upRes.statusText));
     } else {
       const upData = await upRes.json();
-      logLine("firmware", "ok", `[uploaded] ${upData.filename} (${(upData.size/1024).toFixed(1)} KB)`);
+      logLine("firmware", "ok", "[uploaded] " + upData.filename + " (" + (upData.size/1024).toFixed(1) + " KB)");
       uploadOk = true;
     }
   } catch(e) {
-    logLine("firmware", "err", `[upload error] ${e}`);
+    logLine("firmware", "err", "[upload error] " + e);
   }
 
   if (!uploadOk) {
@@ -1768,7 +1811,7 @@ async function firmwareStart() {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ session_id: currentSession.id }),
   }).then(r => r.json()).then(d => {
-    logLine("firmware", "info", `[started] ${JSON.stringify(d)}`);
+    logLine("firmware", "info", "[started] " + JSON.stringify(d));
   }).catch(e => logLine("firmware", "err", String(e)));
 }
 
@@ -1783,6 +1826,189 @@ function firmwareStop() {
     document.getElementById("btn-fw-start").disabled = false;
     document.getElementById("btn-fw-stop").disabled  = true;
   });
+}
+
+function showFwReport() {
+  if (!_fwMeta) return;
+  _openFwReportTab({
+    ..._fwMeta,
+    doneAt:  new Date().toLocaleString("zh-TW"),
+    results: [..._fwResults],
+    alerts:  [..._fwAlerts],
+  });
+}
+
+function openFwHistoryReport(id) {
+  if (!id) return;
+  const arr = JSON.parse(localStorage.getItem("iot_fw_history") || "[]");
+  const entry = arr.find(h => String(h.id) === String(id));
+  if (entry) _openFwReportTab(entry);
+  document.getElementById("fw-history-select").value = "";
+}
+
+function _openFwReportTab(entry) {
+  const html = _buildFwReportHtml(entry);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url  = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function _saveFwHistory(entry) {
+  const KEY = "iot_fw_history";
+  let arr = JSON.parse(localStorage.getItem(KEY) || "[]");
+  const idx = arr.findIndex(h => h.id === entry.id);
+  if (idx >= 0) arr[idx] = entry;
+  else arr.unshift(entry);
+  if (arr.length > 20) arr = arr.slice(0, 20);
+  try { localStorage.setItem(KEY, JSON.stringify(arr)); } catch(e) { console.warn("[fw-history] save failed", e); }
+}
+
+function _loadFwHistory() {
+  const sel = document.getElementById("fw-history-select");
+  if (!sel) return;
+  const arr = JSON.parse(localStorage.getItem("iot_fw_history") || "[]");
+  sel.innerHTML = "<option value=\"\">— 歷史記錄 (" + arr.length + ") —</option>"
+    + arr.map(h => "<option value=\"" + h.id + "\">" + escHtml(h.label) + "</option>").join("");
+}
+
+function _fwConclusion(results, alerts) {
+  const critAlerts = alerts.filter(a => a.severity === "critical").length;
+  const critResults = results.filter(r => r.severity === "critical").length;
+  if (critAlerts > 0)
+    return { level: "err",
+      text: "發現 " + critAlerts + " 個重大韌體安全問題（硬編碼私鑰或後門帳號），設備存在被完全控制的風險，建議立即修補。" };
+  if (alerts.length > 0)
+    return { level: "err",
+      text: "發現 " + alerts.length + " 個敏感資料（硬編碼密碼/API 金鑰），建議從韌體中移除所有硬編碼機密，改用安全金鑰儲存機制。" };
+  if (critResults > 0)
+    return { level: "warn",
+      text: "發現 " + critResults + " 個執行檔缺乏 NX 保護，增加緩衝區溢位攻擊利用風險，建議重新編譯時啟用 -z noexecstack 等保護旗標。" };
+  if (results.length > 0)
+    return { level: "warn",
+      text: "發現 " + results.length + " 個執行檔缺乏部分二進位安全屬性（Stack Canary / RELRO / PIE），建議以安全編譯選項重新建構韌體。" };
+  return { level: "ok", text: "未發現敏感資料或二進位安全問題，韌體安全狀況良好。" };
+}
+
+function _buildFwReportHtml(entry) {
+  const results   = entry.results || [];
+  const alerts    = entry.alerts  || [];
+  const sess      = entry.sess;
+  const filename  = entry.filename  || "—";
+  const filesize  = entry.filesize  || "—";
+  const startedAt = entry.startedAt || "—";
+  const doneAt    = entry.doneAt    || "—";
+
+  function e(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  const conc  = _fwConclusion(results, alerts);
+  const cColor = { ok:"#3fb950", warn:"#e3b341", err:"#ff7b72" }[conc.level] || "#b1bac4";
+  const cBg    = { ok:"rgba(35,134,54,.15)", warn:"rgba(210,153,34,.15)", err:"rgba(218,54,51,.15)" }[conc.level];
+
+  const critA = alerts.filter(a => a.severity === "critical").length;
+  const highA = alerts.filter(a => a.severity === "high").length;
+  const critR = results.filter(r => r.severity === "critical").length;
+  const highR = results.filter(r => r.severity === "high").length;
+  const total = alerts.length + results.length;
+
+  const statsHtml = "<div class=\"stats\">"
+    + "<div class=\"stat\"><div class=\"num" + (critA+critR ? " danger":"") + "\">" + (critA+critR) + "</div><div class=\"lbl\">重大 Critical</div></div>"
+    + "<div class=\"stat\"><div class=\"num" + (highA+highR ? " danger":"") + "\">" + (highA+highR) + "</div><div class=\"lbl\">高危 High</div></div>"
+    + "<div class=\"stat\"><div class=\"num" + (alerts.length ? " danger":"") + "\">" + alerts.length + "</div><div class=\"lbl\">敏感資料</div></div>"
+    + "<div class=\"stat\"><div class=\"num" + (results.length ? " warn":"") + "\">" + results.length + "</div><div class=\"lbl\">不安全 ELF</div></div>"
+    + "<div class=\"stat\"><div class=\"num" + (total ? " danger":"") + "\">" + total + "</div><div class=\"lbl\">總發現數</div></div>"
+    + "</div>";
+
+  const conclusionHtml = "<div style=\"background:" + cBg + ";border:.5px solid " + cColor + ";"
+    + "border-radius:8px;padding:14px 18px;margin-bottom:24px;display:flex;gap:10px;align-items:flex-start\">"
+    + "<span style=\"font-size:20px;flex-shrink:0\">" + (conc.level === "ok" ? "✓" : "⚠") + "</span>"
+    + "<div><div style=\"font-weight:600;color:" + cColor + ";margin-bottom:4px\">結論</div>"
+    + "<div style=\"font-size:13px;color:#b1bac4\">" + e(conc.text) + "</div></div></div>";
+
+  let sensitiveSection = "";
+  if (alerts.length > 0) {
+    const rows = alerts.map(a => {
+      const s = a.severity || "high";
+      const cls = { critical:"critical", high:"high", medium:"medium", low:"low" }[s] || "high";
+      return "<tr>"
+        + "<td><span class=\"badge " + cls + "\">" + s.toUpperCase() + "</span></td>"
+        + "<td class=\"primary\">" + e(a.title||"") + "</td>"
+        + "<td class=\"muted\">" + e((a.detail||"").substring(0,120)) + "</td>"
+        + "</tr>";
+    }).join("");
+    sensitiveSection = "<h2><i class=\"ti ti-eye\" style=\"vertical-align:middle;margin-right:6px\"></i>敏感資料發現</h2>"
+      + "<table><thead><tr><th>等級</th><th>類型</th><th>位置 / 片段</th></tr></thead>"
+      + "<tbody>" + rows + "</tbody></table>";
+  }
+
+  let elfSection = "";
+  if (results.length > 0) {
+    const rows = results.map(r => {
+      const s = r.severity || "high";
+      const cls = { critical:"critical", high:"high", medium:"medium", low:"low" }[s] || "high";
+      return "<tr>"
+        + "<td><span class=\"badge " + cls + "\">" + s.toUpperCase() + "</span></td>"
+        + "<td class=\"primary\">" + e(r.title||"") + "</td>"
+        + "<td class=\"accent\">" + e(r.path||"") + "</td>"
+        + "<td class=\"muted\">" + e((r.detail||"").replace(/.*— /,"").substring(0,120)) + "</td>"
+        + "</tr>";
+    }).join("");
+    elfSection = "<h2><i class=\"ti ti-binary\" style=\"vertical-align:middle;margin-right:6px\"></i>ELF 二進位安全屬性</h2>"
+      + "<table><thead><tr><th>等級</th><th>項目</th><th>檔案路徑</th><th>缺失屬性</th></tr></thead>"
+      + "<tbody>" + rows + "</tbody></table>";
+  }
+
+  const noFindings = total === 0
+    ? "<div style=\"text-align:center;padding:48px;color:#6e7681;font-family:monospace;font-size:13px\">✓ 未發現任何韌體安全問題</div>" : "";
+
+  const css = "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}"
+    + "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh}"
+    + "#toolbar{display:flex;align-items:center;gap:12px;padding:10px 24px;background:#161b22;border-bottom:.5px solid rgba(255,255,255,.08);position:sticky;top:0;z-index:10}"
+    + "#tb-title{font-size:15px;font-weight:600;color:#388bfd}.spacer{flex:1}"
+    + ".tbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:transparent;border:.5px solid rgba(255,255,255,.15);color:#b1bac4;transition:background .1s}"
+    + ".tbtn:hover{background:#21262d}"
+    + "#content{max-width:1100px;margin:0 auto;padding:32px 40px}"
+    + ".meta-hdr{border-bottom:.5px solid rgba(255,255,255,.15);padding-bottom:20px;margin-bottom:24px}"
+    + ".meta-hdr h2{font-size:20px;font-weight:700;margin-bottom:10px;color:#388bfd}"
+    + ".meta-row{display:flex;flex-wrap:wrap;gap:20px;font-family:monospace;font-size:12px;color:#b1bac4}"
+    + ".meta-row b{color:#e6edf3}"
+    + ".stats{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:20px}"
+    + ".stat{background:#161b22;border:.5px solid rgba(255,255,255,.08);border-radius:8px;padding:14px 20px;flex:1;min-width:120px}"
+    + ".num{font-size:28px;font-weight:700;font-family:monospace;color:#388bfd}"
+    + ".num.danger{color:#ff7b72}.num.warn{color:#e3b341}"
+    + ".lbl{font-size:11px;color:#6e7681;margin-top:2px;text-transform:uppercase;letter-spacing:.06em}"
+    + "h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#b1bac4;margin:28px 0 12px;padding-bottom:6px;border-bottom:.5px solid rgba(255,255,255,.08)}"
+    + "table{width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;background:#161b22;border:.5px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden;margin-bottom:8px}"
+    + "th{padding:8px 12px;text-align:left;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#6e7681;background:#21262d;border-bottom:.5px solid rgba(255,255,255,.08)}"
+    + "td{padding:7px 12px;border-bottom:.5px solid rgba(255,255,255,.06);color:#b1bac4;vertical-align:top}"
+    + "tr:last-child td{border-bottom:none}tr:hover td{background:#21262d}"
+    + ".primary{color:#e6edf3}.muted{color:#6e7681}.accent{color:#388bfd}"
+    + ".badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;font-family:monospace;text-transform:uppercase}"
+    + ".badge.critical{background:rgba(218,54,51,.15);color:#ff7b72}"
+    + ".badge.high{background:#3b2b00;color:#e3b341}"
+    + ".badge.medium{background:rgba(210,153,34,.15);color:#e3b341}"
+    + ".badge.low{background:rgba(35,134,54,.15);color:#3fb950}"
+    + "@media print{#toolbar{display:none}#content{padding:16px}}";
+
+  return "<!DOCTYPE html>\n<html lang=\"zh-TW\">\n<head>\n"
+    + "<meta charset=\"UTF-8\">\n<title>IoT SecKit — 韌體分析 " + e(filename) + "</title>\n"
+    + "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/tabler-icons.min.css\"/>\n"
+    + "<style>" + css + "</style>\n</head>\n<body>\n"
+    + "<div id=\"toolbar\"><i class=\"ti ti-cpu\" style=\"font-size:18px;color:#388bfd\"></i>"
+    + "<span id=\"tb-title\">IoT SecKit — 韌體分析報告</span><span class=\"spacer\"></span>"
+    + "<button class=\"tbtn\" onclick=\"window.print()\"><i class=\"ti ti-printer\"></i> 列印 / 存 PDF</button>"
+    + "<button class=\"tbtn\" onclick=\"window.close()\"><i class=\"ti ti-x\"></i> 關閉</button></div>\n"
+    + "<div id=\"content\">"
+    + "<div class=\"meta-hdr\"><h2><i class=\"ti ti-cpu\" style=\"vertical-align:middle;margin-right:8px\"></i>韌體分析報告</h2>"
+    + "<div class=\"meta-row\">"
+    + "<span><b>會話</b>: " + e(sess && sess.name ? sess.name : "—") + "</span>"
+    + "<span><b>韌體檔案</b>: " + e(filename) + "</span>"
+    + "<span><b>檔案大小</b>: " + e(filesize) + "</span>"
+    + "<span><b>開始時間</b>: " + e(startedAt) + "</span>"
+    + "<span><b>完成時間</b>: " + e(doneAt) + "</span>"
+    + "</div></div>"
+    + statsHtml + conclusionHtml + sensitiveSection + elfSection + noFindings
+    + "</div>\n</body>\n</html>";
 }
 
 // ── Log console helpers ───────────────────────────────────────────────────────
@@ -1813,6 +2039,7 @@ const _initModule = location.hash.replace("#", "") || "scanner";
 switchModule(_initModule);
 _loadScanHistory();
 _loadCredHistory();
+_loadFwHistory();
 </script>
 </body>
 </html>
