@@ -10,6 +10,8 @@ DEPTH_FLAGS: dict[str, str] = {
     "quick":    "-sn -T4",
     "standard": "-sV -T3 --open",
     "deep":     "-sV -O -A -T2 --open",
+    "all_tcp":  "-p 1-65535 -T4 -A -v",
+    "all_udp":  "-sS -sU -T4 -A -v",
 }
 
 NSE_SCRIPTS: dict[str, str] = {

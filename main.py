@@ -1,6 +1,6 @@
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -32,20 +32,18 @@ app.add_middleware(
 # ── REST API routes ───────────────────────────────────────────────────────────
 app.include_router(scanner_router.router, prefix="/api")
 
-# ── WebSocket routes (scanner) ────────────────────────────────────────────────
-# /ws/scanner/{session_id}  — registered on the scanner router with prefix /ws
-from routers.scanner import router as _scanner_ws_router
-from fastapi import APIRouter
-
-_ws_router = APIRouter()
-
-@_ws_router.websocket("/scanner/{session_id}")
-async def _ws_scanner_proxy(websocket, session_id: int):
-    # Delegate to scanner router's WebSocket handler
-    from routers.scanner import ws_scanner
-    await ws_scanner(websocket, session_id)
-
-app.include_router(_ws_router, prefix="/ws")
+# ── WebSocket routes ──────────────────────────────────────────────────────────
+@app.websocket("/ws/scanner/{session_id}")
+async def ws_scanner(websocket: WebSocket, session_id: int):
+    await websocket.accept()
+    scanner_router._ws_connections.setdefault(session_id, []).append(websocket)
+    try:
+        while True:
+            await websocket.receive_text()
+    except WebSocketDisconnect:
+        conns = scanner_router._ws_connections.get(session_id, [])
+        if websocket in conns:
+            conns.remove(websocket)
 
 # ── Session management (lightweight, no dedicated router yet) ─────────────────
 from fastapi import Depends

@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -99,22 +99,6 @@ def get_services(session_id: int, db: Session = Depends(get_db)):
         }
         for r in rows
     ]
-
-
-# ── WebSocket endpoint ────────────────────────────────────────────────────────
-
-@router.websocket("/ws/{session_id}")
-async def ws_scanner(websocket: WebSocket, session_id: int):
-    await websocket.accept()
-    _ws_connections.setdefault(session_id, []).append(websocket)
-    try:
-        while True:
-            # Keep connection alive; client messages are ignored (read-only stream)
-            await websocket.receive_text()
-    except WebSocketDisconnect:
-        conns = _ws_connections.get(session_id, [])
-        if websocket in conns:
-            conns.remove(websocket)
 
 
 # ── Cross-module hook ─────────────────────────────────────────────────────────
