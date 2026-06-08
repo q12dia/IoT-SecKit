@@ -26,8 +26,8 @@
       --color-border-secondary:   rgba(255,255,255,0.15);
 
       --color-text-primary:       #e6edf3;
-      --color-text-secondary:     #8b949e;
-      --color-text-muted:         #484f58;
+      --color-text-secondary:     #b1bac4;
+      --color-text-muted:         #6e7681;
 
       --color-accent-info:        #388bfd;
       --color-accent-info-muted:  rgba(56,139,253,0.15);
@@ -432,113 +432,18 @@
     .sev-info     { background: var(--color-accent-info-muted);  color: var(--color-accent-info); }
     .sev-iot      { background: rgba(139,71,198,0.18); color: #c084fc; }
 
-    /* ── Report overlay ───────────────────────────────────────────────────── */
-    #report-overlay {
-      display: none;
-      position: fixed; inset: 0;
-      background: var(--color-bg-base);
-      z-index: 200;
-      flex-direction: column;
-    }
-    #report-overlay.open { display: flex; }
-
-    .report-toolbar {
-      display: flex; align-items: center; gap: 12px;
-      padding: 10px 20px;
-      border-bottom: 0.5px solid var(--color-border-tertiary);
-      background: var(--color-bg-surface);
-      flex-shrink: 0;
-    }
-    .report-toolbar-title {
-      font-size: 14px; font-weight: 600;
-    }
-
-    #report-frame {
-      flex: 1;
-      overflow-y: auto;
-      padding: 32px 40px;
-    }
-
-    /* Report content styles */
-    .rpt { max-width: 1080px; margin: 0 auto; color: var(--color-text-primary); }
-    .rpt-header {
-      border-bottom: 0.5px solid var(--color-border-secondary);
-      padding-bottom: 20px; margin-bottom: 24px;
-    }
-    .rpt-header h1 {
-      font-size: 22px; font-weight: 700; margin-bottom: 8px;
-      color: var(--color-accent-info);
-    }
-    .rpt-meta {
-      display: flex; flex-wrap: wrap; gap: 24px;
-      font-family: var(--font-mono); font-size: 12px;
-      color: var(--color-text-secondary);
-    }
-    .rpt-meta span b { color: var(--color-text-primary); }
-
-    .rpt-stats {
-      display: flex; gap: 16px; flex-wrap: wrap;
-      margin-bottom: 32px;
-    }
-    .rpt-stat {
-      background: var(--color-bg-surface);
-      border: 0.5px solid var(--color-border-tertiary);
-      border-radius: var(--border-radius-md);
-      padding: 14px 20px; flex: 1; min-width: 140px;
-    }
-    .rpt-stat-num {
-      font-size: 28px; font-weight: 700;
-      font-family: var(--font-mono);
-      color: var(--color-accent-info);
-    }
-    .rpt-stat-label {
-      font-size: 11px; color: var(--color-text-muted);
-      margin-top: 2px; text-transform: uppercase; letter-spacing: .06em;
-    }
-
-    .rpt h2 {
-      font-size: 13px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .06em;
-      color: var(--color-text-secondary);
-      margin: 28px 0 12px;
-      padding-bottom: 6px;
-      border-bottom: 0.5px solid var(--color-border-tertiary);
-    }
-
-    .rpt-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-      font-family: var(--font-mono);
-      background: var(--color-bg-surface);
-      border: 0.5px solid var(--color-border-tertiary);
-      border-radius: var(--border-radius-md);
+    /* ── Scan progress bar ─────────────────────────────────────────────────── */
+    .scan-progress-track {
+      height: 3px;
+      background: var(--color-bg-elevated);
+      border-radius: 2px;
       overflow: hidden;
     }
-    .rpt-table th {
-      padding: 8px 12px; text-align: left;
-      font-size: 10.5px; font-weight: 600;
-      text-transform: uppercase; letter-spacing: .06em;
-      color: var(--color-text-muted);
-      background: var(--color-bg-elevated);
-      border-bottom: 0.5px solid var(--color-border-tertiary);
-    }
-    .rpt-table td {
-      padding: 7px 12px;
-      border-bottom: 0.5px solid var(--color-border-tertiary);
-      color: var(--color-text-secondary);
-      vertical-align: top;
-    }
-    .rpt-table tr:last-child td { border-bottom: none; }
-    .rpt-table tr:hover td { background: var(--color-bg-elevated); }
-
-    .rpt-cve-list { display: flex; flex-wrap: wrap; gap: 4px; }
-
-    @media print {
-      #report-overlay { position: absolute; }
-      .report-toolbar { display: none; }
-      #report-frame { padding: 0; }
-      .rpt-stat { break-inside: avoid; }
+    .scan-progress-fill {
+      height: 100%;
+      background: var(--color-accent-info);
+      border-radius: 2px;
+      transition: width 0.4s ease;
     }
 
     /* Empty-state placeholder */
@@ -767,6 +672,24 @@
           <button class="btn btn-ghost" id="btn-scan-report" disabled onclick="showScanReport()">
             <i class="ti ti-file-report"></i> 掃描結果
           </button>
+          <div class="form-group">
+            <label>歷史記錄</label>
+            <select id="scan-history-select" onchange="openHistoryReport(this.value)">
+              <option value="">— 選擇過往掃描 —</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div id="scan-progress-wrap" style="display:none;flex-shrink:0;padding:0 2px">
+        <div class="scan-progress-track">
+          <div id="scan-progress-bar" class="scan-progress-fill" style="width:0%"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;margin-top:4px">
+          <span style="font-family:var(--font-mono);font-size:10px;color:var(--color-text-muted)">
+            <i class="ti ti-radar" style="font-size:10px"></i> 掃描中...
+          </span>
+          <span id="scan-progress-pct" style="font-family:var(--font-mono);font-size:10px;color:var(--color-text-muted)">0%</span>
         </div>
       </div>
 
@@ -1020,22 +943,6 @@
   </div>
 </div>
 
-<!-- ── Report Overlay ────────────────────────────────────────────────────────── -->
-<div id="report-overlay">
-  <div class="report-toolbar">
-    <i class="ti ti-file-report" style="font-size:18px;color:var(--color-accent-info)"></i>
-    <span class="report-toolbar-title">掃描結果報告</span>
-    <span class="tb-spacer"></span>
-    <button class="btn btn-ghost" onclick="window.print()">
-      <i class="ti ti-printer"></i> 列印 / 存 PDF
-    </button>
-    <button class="btn btn-ghost" onclick="closeReport()">
-      <i class="ti ti-x"></i> 關閉
-    </button>
-  </div>
-  <div id="report-frame"></div>
-</div>
-
 <!-- ── JS ────────────────────────────────────────────────────────────────────── -->
 <script src="/static/js/ws-client.js"></script>
 <script>
@@ -1053,10 +960,11 @@ const MODULE_META = {
 };
 
 // ── Global state ──────────────────────────────────────────────────────────────
-let currentSession = null;   // { id, name, target_ip }
-let scannerWS      = null;
-let _scanResults   = [];     // accumulates result objects for the report
-let _scanStartTime = null;
+let currentSession   = null;
+let scannerWS        = null;
+let _scanResults     = [];
+let _currentScanMeta = null;
+let _scanProgress    = 0;
 
 // ── Module switching ──────────────────────────────────────────────────────────
 function switchModule(name, pushHistory = true) {
@@ -1120,12 +1028,23 @@ function scannerStart() {
 
   // Reset per-scan state
   _scanResults = [];
-  _scanStartTime = new Date();
+  _scanProgress = 0;
+  _currentScanMeta = {
+    sess: currentSession, target, depth,
+    depthLabel: ({quick:"Quick",standard:"Standard",deep:"Deep",all_tcp:"All TCP",all_udp:"All UDP"})[depth] || depth,
+    startedAt: new Date().toLocaleString("zh-TW"),
+  };
   document.getElementById("btn-scan-report").disabled = true;
+  const _pw = document.getElementById("scan-progress-wrap");
+  const _pb = document.getElementById("scan-progress-bar");
+  const _pp = document.getElementById("scan-progress-pct");
+  if (_pw) _pw.style.display = "";
+  if (_pb) _pb.style.width = "5%";
+  if (_pp) _pp.textContent = "5%";
 
   // Connect WebSocket first
   scannerWS = new WSClient("scanner", currentSession.id, {
-    log:     (d) => logLine("scanner", d.level, d.msg),
+    log:     (d) => { logLine("scanner", d.level, d.msg); _incScanProgress(); },
     result:  (d) => appendScanResult(d),
     alert:   (d) => logLine("scanner", "err", `[ALERT ${d.severity}] ${d.title}: ${d.detail}`),
     progress:(d) => logLine("scanner", "info", `[progress] ${d.phase_name} ${d.pct}%`),
@@ -1134,7 +1053,22 @@ function scannerStart() {
       setDot("scanner", "idle");
       document.getElementById("btn-scan-start").disabled = false;
       document.getElementById("btn-scan-stop").disabled  = true;
+      const _pw2 = document.getElementById("scan-progress-wrap");
+      const _pb2 = document.getElementById("scan-progress-bar");
+      const _pp2 = document.getElementById("scan-progress-pct");
+      if (_pb2) _pb2.style.width = "100%";
+      if (_pp2) _pp2.textContent = "100%";
+      setTimeout(() => { if (_pw2) _pw2.style.display = "none"; }, 1000);
       if (_scanResults.length > 0) {
+        const _entry = {
+          id: Date.now(),
+          label: `${_currentScanMeta?.sess?.name||"—"} · ${_currentScanMeta?.target||"—"} · ${new Date().toLocaleString("zh-TW")}`,
+          ..._currentScanMeta,
+          doneAt: new Date().toLocaleString("zh-TW"),
+          results: [..._scanResults],
+        };
+        _saveToHistory(_entry);
+        _loadScanHistory();
         document.getElementById("btn-scan-report").disabled = false;
       }
     },
@@ -1258,136 +1192,186 @@ function toggleDetail(rowId) {
 
 // ── Report generation ─────────────────────────────────────────────────────────
 function showScanReport() {
-  const results = _scanResults;
-  if (!results.length) return;
-
-  const sess      = currentSession || {};
-  const startedAt = _scanStartTime ? _scanStartTime.toLocaleString("zh-TW") : "—";
-  const doneAt    = new Date().toLocaleString("zh-TW");
-
-  // Aggregate stats
-  const hosts    = [...new Set(results.map(r => r.host))];
-  const iotCount = results.filter(r => r.is_iot).length;
-  const allCves  = results.flatMap(r => (r.cves || []).map(c => ({ ...c, host: r.host, port: r.port, service: r.service })));
-  const critCves = allCves.filter(c => parseFloat(c.cvss) >= 7);
-
-  // --- Stats cards ---
-  const statsHtml = `
-    <div class="rpt-stats">
-      <div class="rpt-stat"><div class="rpt-stat-num">${hosts.length}</div><div class="rpt-stat-label">受影響主機</div></div>
-      <div class="rpt-stat"><div class="rpt-stat-num">${results.length}</div><div class="rpt-stat-label">開放 Port</div></div>
-      <div class="rpt-stat"><div class="rpt-stat-num">${iotCount}</div><div class="rpt-stat-label">IoT 服務</div></div>
-      <div class="rpt-stat"><div class="rpt-stat-num" style="color:${allCves.length ? 'var(--color-text-danger)' : 'inherit'}">${allCves.length}</div><div class="rpt-stat-label">CVE 數量</div></div>
-      <div class="rpt-stat"><div class="rpt-stat-num" style="color:${critCves.length ? 'var(--color-text-danger)' : 'inherit'}">${critCves.length}</div><div class="rpt-stat-label">高危 CVE (≥7.0)</div></div>
-    </div>`;
-
-  // --- Results table rows ---
-  const rowsHtml = results.map(r => {
-    const iotBadge = r.is_iot ? `<span class="sev sev-iot">IoT</span>` : `—`;
-    const cveBadges = (r.cves || []).map(c => {
-      const s = parseFloat(c.cvss) || 0;
-      const cls = s >= 9 ? "sev-critical" : s >= 7 ? "sev-high" : s >= 4 ? "sev-medium" : "sev-low";
-      return `<span class="sev ${cls}">${escHtml(c.id)}</span>`;
-    }).join(" ");
-    return `<tr>
-      <td class="host-cell">${escHtml(r.host)}</td>
-      <td>${r.port}</td>
-      <td>${escHtml(r.protocol)}</td>
-      <td>${escHtml(r.service)}</td>
-      <td>${escHtml(r.version || "—")}</td>
-      <td style="color:var(--color-text-muted)">${escHtml(r.os_guess || "—")}</td>
-      <td style="max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"
-          title="${escHtml(r.banner || "")}">${escHtml(r.banner ? r.banner.split("\n")[0].substring(0,80) : "—")}</td>
-      <td>${iotBadge}</td>
-      <td><div class="rpt-cve-list">${cveBadges || "—"}</div></td>
-    </tr>`;
-  }).join("");
-
-  const resultsTableHtml = `
-    <h2>Port / 服務清單</h2>
-    <table class="rpt-table">
-      <thead>
-        <tr>
-          <th>Host</th><th>Port</th><th>Proto</th><th>Service</th>
-          <th>Version</th><th>OS</th><th>Banner</th><th>Flag</th><th>CVE</th>
-        </tr>
-      </thead>
-      <tbody>${rowsHtml}</tbody>
-    </table>`;
-
-  // --- CVE detail table ---
-  let cveTableHtml = "";
-  if (allCves.length > 0) {
-    const cveRows = allCves.map(c => {
-      const s = parseFloat(c.cvss) || 0;
-      const cls = s >= 9 ? "sev-critical" : s >= 7 ? "sev-high" : s >= 4 ? "sev-medium" : "sev-low";
-      return `<tr>
-        <td><span class="sev ${cls}">${escHtml(c.id)}</span></td>
-        <td>${escHtml(c.cvss || "—")}</td>
-        <td>${escHtml(c.host)}</td>
-        <td>${c.port}</td>
-        <td>${escHtml(c.service)}</td>
-      </tr>`;
-    }).join("");
-    cveTableHtml = `
-      <h2>CVE 漏洞清單</h2>
-      <table class="rpt-table">
-        <thead><tr><th>CVE ID</th><th>CVSS</th><th>Host</th><th>Port</th><th>Service</th></tr></thead>
-        <tbody>${cveRows}</tbody>
-      </table>`;
-  }
-
-  // --- NSE Script detail ---
-  const withScripts = results.filter(r => r.scripts?.length > 0);
-  let scriptHtml = "";
-  if (withScripts.length > 0) {
-    const items = withScripts.flatMap(r =>
-      r.scripts.map(s => `
-        <tr>
-          <td>${escHtml(r.host)}</td>
-          <td>${r.port}</td>
-          <td>${escHtml(r.service)}</td>
-          <td style="color:var(--color-accent-info)">${escHtml(s.id)}</td>
-          <td><pre style="margin:0;font-size:11px;white-space:pre-wrap;word-break:break-all;color:var(--color-text-secondary)">${escHtml(s.output)}</pre></td>
-        </tr>`)
-    ).join("");
-    scriptHtml = `
-      <h2>NSE Script 輸出</h2>
-      <table class="rpt-table">
-        <thead><tr><th>Host</th><th>Port</th><th>Service</th><th>Script</th><th>Output</th></tr></thead>
-        <tbody>${items}</tbody>
-      </table>`;
-  }
-
-  // --- Depth label ---
-  const depthMap = { quick:"Quick", standard:"Standard", deep:"Deep", all_tcp:"All TCP", all_udp:"All UDP" };
-  const depthVal = document.getElementById("scan-depth")?.value || "—";
-
-  // --- Compose full report ---
-  const html = `
-    <div class="rpt">
-      <div class="rpt-header">
-        <h1><i class="ti ti-shield-lock" style="vertical-align:middle;margin-right:8px"></i>IoT SecKit 掃描報告</h1>
-        <div class="rpt-meta">
-          <span><b>會話</b>: ${escHtml(sess.name || "—")}</span>
-          <span><b>目標</b>: ${escHtml(sess.target_ip || document.getElementById("scan-target").value || "—")}</span>
-          <span><b>掃描深度</b>: ${depthMap[depthVal] || depthVal}</span>
-          <span><b>開始時間</b>: ${startedAt}</span>
-          <span><b>完成時間</b>: ${doneAt}</span>
-        </div>
-      </div>
-      ${statsHtml}
-      ${resultsTableHtml}
-      ${cveTableHtml}
-      ${scriptHtml}
-    </div>`;
-
-  document.getElementById("report-frame").innerHTML = html;
-  document.getElementById("report-overlay").classList.add("open");
+  if (!_scanResults.length) return;
+  _openReportTab({ results: _scanResults, ..._currentScanMeta, doneAt: new Date().toLocaleString("zh-TW") });
 }
 
-function closeReport() {
-  document.getElementById("report-overlay").classList.remove("open");
+function openHistoryReport(id) {
+  if (!id) return;
+  const arr = JSON.parse(localStorage.getItem("iot_scan_history") || "[]");
+  const entry = arr.find(h => String(h.id) === String(id));
+  if (entry) _openReportTab(entry);
+  document.getElementById("scan-history-select").value = "";
+}
+
+function _openReportTab(entry) {
+  const html = _buildReportHtml(entry);
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url  = URL.createObjectURL(blob);
+  window.open(url, "_blank");
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+function _saveToHistory(entry) {
+  const KEY = "iot_scan_history";
+  let arr = JSON.parse(localStorage.getItem(KEY) || "[]");
+  arr.unshift(entry);
+  if (arr.length > 20) arr = arr.slice(0, 20);
+  try { localStorage.setItem(KEY, JSON.stringify(arr)); } catch(err) { console.warn("[history] save failed", err); }
+}
+
+function _loadScanHistory() {
+  const sel = document.getElementById("scan-history-select");
+  if (!sel) return;
+  const arr = JSON.parse(localStorage.getItem("iot_scan_history") || "[]");
+  sel.innerHTML = "<option value=\"\">— 歷史記錄 (" + arr.length + ") —</option>" +
+    arr.map(h => "<option value=\"" + h.id + "\">" + escHtml(h.label) + "</option>").join("");
+}
+
+function _incScanProgress() {
+  if (_scanProgress < 88) {
+    _scanProgress += _scanProgress < 30 ? 3 : _scanProgress < 60 ? 1.5 : 0.4;
+    const p   = Math.min(Math.round(_scanProgress), 88);
+    const bar = document.getElementById("scan-progress-bar");
+    const pct = document.getElementById("scan-progress-pct");
+    if (bar) bar.style.width = p + "%";
+    if (pct) pct.textContent = p + "%";
+  }
+}
+
+function _buildReportHtml(entry) {
+  const results   = entry.results || [];
+  const sess      = entry.sess;
+  const target    = entry.target || "";
+  const depthLabel= entry.depthLabel || "";
+  const startedAt = entry.startedAt || "—";
+  const doneAt    = entry.doneAt || "—";
+
+  function e(s) { return String(s||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
+
+  const hosts    = [...new Set(results.map(r => r.host))];
+  const iotCount = results.filter(r => r.is_iot).length;
+  const allCves  = results.flatMap(r => (r.cves||[]).map(c => ({...c, host:r.host, port:r.port, service:r.service})));
+  const highCves = allCves.filter(c => parseFloat(c.cvss) >= 7);
+
+  const statsHtml = "<div class=\"stats\">"
+    + "<div class=\"stat\"><div class=\"num\">" + hosts.length + "</div><div class=\"lbl\">受影響主機</div></div>"
+    + "<div class=\"stat\"><div class=\"num\">" + results.length + "</div><div class=\"lbl\">開放 Port</div></div>"
+    + "<div class=\"stat\"><div class=\"num\">" + iotCount + "</div><div class=\"lbl\">IoT 服務</div></div>"
+    + "<div class=\"stat\"><div class=\"num" + (allCves.length ? " danger" : "") + "\">" + allCves.length + "</div><div class=\"lbl\">CVE 數量</div></div>"
+    + "<div class=\"stat\"><div class=\"num" + (highCves.length ? " danger" : "") + "\">" + highCves.length + "</div><div class=\"lbl\">高危 CVE ≥7.0</div></div>"
+    + "</div>";
+
+  const resultRows = results.map(r => {
+    const iot = r.is_iot ? "<span class=\"badge iot\">IoT</span>" : "—";
+    const cveBadges = (r.cves||[]).map(c => {
+      const s = parseFloat(c.cvss)||0;
+      const cls = s>=9?"critical":s>=7?"high":s>=4?"medium":"low";
+      return "<span class=\"badge " + cls + "\">" + e(c.id) + "</span>";
+    }).join(" ") || "—";
+    return "<tr>"
+      + "<td class=\"primary\">" + e(r.host) + "</td><td>" + r.port + "</td>"
+      + "<td>" + e(r.protocol) + "</td><td>" + e(r.service) + "</td>"
+      + "<td>" + e(r.version||"—") + "</td>"
+      + "<td class=\"muted\">" + e(r.os_guess||"—") + "</td>"
+      + "<td class=\"clip\" title=\"" + e(r.banner||"") + "\">" + e((r.banner||"—").split("\n")[0].substring(0,80)) + "</td>"
+      + "<td>" + iot + "</td>"
+      + "<td><div class=\"badges\">" + cveBadges + "</div></td>"
+      + "</tr>";
+  }).join("");
+
+  let cveSection = "";
+  if (allCves.length) {
+    const rows = allCves.map(c => {
+      const s = parseFloat(c.cvss)||0;
+      const cls = s>=9?"critical":s>=7?"high":s>=4?"medium":"low";
+      return "<tr><td><span class=\"badge " + cls + "\">" + e(c.id) + "</span></td>"
+        + "<td>" + e(c.cvss||"—") + "</td><td>" + e(c.host) + "</td>"
+        + "<td>" + c.port + "</td><td>" + e(c.service) + "</td></tr>";
+    }).join("");
+    cveSection = "<h2>CVE 漏洞清單</h2>"
+      + "<table><thead><tr><th>CVE ID</th><th>CVSS</th><th>Host</th><th>Port</th><th>Service</th></tr></thead>"
+      + "<tbody>" + rows + "</tbody></table>";
+  }
+
+  let scriptSection = "";
+  const withScripts = results.filter(r => r.scripts && r.scripts.length);
+  if (withScripts.length) {
+    const sRows = withScripts.flatMap(r => r.scripts.map(s =>
+      "<tr><td>" + e(r.host) + "</td><td>" + r.port + "</td><td>" + e(r.service) + "</td>"
+      + "<td class=\"accent\">" + e(s.id) + "</td>"
+      + "<td><pre>" + e(s.output) + "</pre></td></tr>"
+    )).join("");
+    scriptSection = "<h2>NSE Script 輸出</h2>"
+      + "<table><thead><tr><th>Host</th><th>Port</th><th>Service</th><th>Script</th><th>Output</th></tr></thead>"
+      + "<tbody>" + sRows + "</tbody></table>";
+  }
+
+  const css = "*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}"
+    + "body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0d1117;color:#e6edf3;min-height:100vh}"
+    + "#toolbar{display:flex;align-items:center;gap:12px;padding:10px 24px;background:#161b22;border-bottom:.5px solid rgba(255,255,255,.08);position:sticky;top:0;z-index:10}"
+    + "#tb-title{font-size:15px;font-weight:600;color:#388bfd}"
+    + ".spacer{flex:1}"
+    + ".tbtn{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:6px;font-size:12.5px;font-weight:500;cursor:pointer;background:transparent;border:.5px solid rgba(255,255,255,.15);color:#b1bac4;transition:background .1s}"
+    + ".tbtn:hover{background:#21262d}"
+    + "#content{max-width:1100px;margin:0 auto;padding:32px 40px}"
+    + ".meta-hdr{border-bottom:.5px solid rgba(255,255,255,.15);padding-bottom:20px;margin-bottom:24px}"
+    + ".meta-hdr h2{font-size:20px;font-weight:700;margin-bottom:10px;color:#388bfd}"
+    + ".meta-row{display:flex;flex-wrap:wrap;gap:20px;font-family:monospace;font-size:12px;color:#b1bac4}"
+    + ".meta-row b{color:#e6edf3}"
+    + ".stats{display:flex;gap:14px;flex-wrap:wrap;margin-bottom:28px}"
+    + ".stat{background:#161b22;border:.5px solid rgba(255,255,255,.08);border-radius:8px;padding:14px 20px;flex:1;min-width:120px}"
+    + ".num{font-size:28px;font-weight:700;font-family:monospace;color:#388bfd}"
+    + ".num.danger{color:#ff7b72}"
+    + ".lbl{font-size:11px;color:#6e7681;margin-top:2px;text-transform:uppercase;letter-spacing:.06em}"
+    + "h2{font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#b1bac4;margin:28px 0 12px;padding-bottom:6px;border-bottom:.5px solid rgba(255,255,255,.08)}"
+    + "table{width:100%;border-collapse:collapse;font-size:12px;font-family:monospace;background:#161b22;border:.5px solid rgba(255,255,255,.08);border-radius:8px;overflow:hidden;margin-bottom:8px}"
+    + "th{padding:8px 12px;text-align:left;font-size:10.5px;font-weight:600;text-transform:uppercase;letter-spacing:.06em;color:#6e7681;background:#21262d;border-bottom:.5px solid rgba(255,255,255,.08)}"
+    + "td{padding:7px 12px;border-bottom:.5px solid rgba(255,255,255,.06);color:#b1bac4;vertical-align:top}"
+    + "tr:last-child td{border-bottom:none}tr:hover td{background:#21262d}"
+    + ".primary{color:#e6edf3}.muted{color:#6e7681}.accent{color:#388bfd}"
+    + ".clip{max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}"
+    + "pre{margin:0;font-size:11px;white-space:pre-wrap;word-break:break-all}"
+    + ".badges{display:flex;flex-wrap:wrap;gap:4px}"
+    + ".badge{display:inline-flex;align-items:center;padding:2px 7px;border-radius:10px;font-size:10px;font-weight:600;font-family:monospace;text-transform:uppercase}"
+    + ".badge.critical{background:rgba(218,54,51,.15);color:#ff7b72}"
+    + ".badge.high{background:#3b2b00;color:#e3b341}"
+    + ".badge.medium{background:rgba(210,153,34,.15);color:#e3b341}"
+    + ".badge.low{background:rgba(35,134,54,.15);color:#3fb950}"
+    + ".badge.iot{background:rgba(139,71,198,.18);color:#c084fc}"
+    + "@media print{#toolbar{display:none}#content{padding:16px}}";
+
+  return "<!DOCTYPE html>\n<html lang=\"zh-TW\">\n<head>\n"
+    + "<meta charset=\"UTF-8\">\n"
+    + "<title>IoT SecKit — " + e(target) + "</title>\n"
+    + "<link rel=\"stylesheet\" href=\"https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.x/tabler-icons.min.css\"/>\n"
+    + "<style>" + css + "</style>\n</head>\n<body>\n"
+    + "<div id=\"toolbar\">"
+    + "<i class=\"ti ti-shield-lock\" style=\"font-size:18px;color:#388bfd\"></i>"
+    + "<span id=\"tb-title\">IoT SecKit 掃描結報告</span>"
+    + "<span class=\"spacer\"></span>"
+    + "<button class=\"tbtn\" onclick=\"window.print()\"><i class=\"ti ti-printer\"></i> 列印 / 存 PDF</button>"
+    + "<button class=\"tbtn\" onclick=\"window.close()\"><i class=\"ti ti-x\"></i> 關閉</button>"
+    + "</div>\n"
+    + "<div id=\"content\">"
+    + "<div class=\"meta-hdr\">"
+    + "<h2><i class=\"ti ti-radar\" style=\"vertical-align:middle;margin-right:8px\"></i>掃描摘要</h2>"
+    + "<div class=\"meta-row\">"
+    + "<span><b>會話</b>: " + e(sess && sess.name ? sess.name : "—") + "</span>"
+    + "<span><b>目標</b>: " + e(target||"—") + "</span>"
+    + "<span><b>掃描深度</b>: " + e(depthLabel||"—") + "</span>"
+    + "<span><b>開始時間</b>: " + e(startedAt) + "</span>"
+    + "<span><b>完成時間</b>: " + e(doneAt) + "</span>"
+    + "</div></div>"
+    + statsHtml
+    + "<h2>Port / 服務清單</h2>"
+    + "<table><thead><tr>"
+    + "<th>Host</th><th>Port</th><th>Proto</th><th>Service</th>"
+    + "<th>Version</th><th>OS</th><th>Banner</th><th>Flag</th><th>CVE</th>"
+    + "</tr></thead><tbody>" + resultRows + "</tbody></table>"
+    + cveSection
+    + scriptSection
+    + "</div>\n</body>\n</html>";
 }
 
 // ── Log console helpers ───────────────────────────────────────────────────────
@@ -1416,6 +1400,7 @@ function setDot(module, state) {
 // ── Boot ──────────────────────────────────────────────────────────────────────
 const _initModule = location.hash.replace("#", "") || "scanner";
 switchModule(_initModule);
+_loadScanHistory();
 </script>
 </body>
 </html>
